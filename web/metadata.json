@@ -1,0 +1,5 @@
+{
+  "name": "Amazon Image Pro - 一键生成亚马逊前台图",
+  "description": "基于AI的亚马逊产品图片生成工具，支持卖点提炼、场景图生成及合规性检查。",
+  "requestFramePermissions": []
+}
