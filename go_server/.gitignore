@@ -1,0 +1,7 @@
+.env
+go_server
+*.exe
+*.dll
+*.so
+*.dylib
+.env
