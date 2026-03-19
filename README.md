@@ -2,227 +2,290 @@
 
 智能亚马逊产品图生成工具，使用 Google Gemini AI 生成专业的产品营销图片。
 
+**🎉 新版本已全面升级！集成用户管理、任务系统、CDN存储等完整功能。**
+
+## ✨ 核心功能
+
+### 🖼️ 图片生成（原有功能）
+- **产品卖点分析**: 基于关键词和竞品分析，AI生成专业产品卖点
+- **智能图片生成**: 使用Gemini多模态能力生成产品营销图
+- **图片编辑**: 智能去背景、扩图等图片编辑功能
+- **A+页面方案**: 生成符合亚马逊规范的A+页面内容方案
+- **风格参考**: 支持上传参考图，生成指定风格的产品图
+
+### 🆕 新增功能
+- **用户系统**: 完整的注册、登录、会话管理
+- **任务中心**: 自动记录所有操作，支持任务历史查看
+- **CDN集成**: 产品图片自动上传CDN，持久化存储
+- **版本管理**: 每次生成保留历史版本，可随时查看
+- **导航系统**: 统一导航栏，清晰的功能模块划分
+
 ## 📦 项目结构
 
 ```
 electric_ai_tool/
-├── web/              # 前端应用（React + TypeScript）
-├── server/           # Node.js 后端服务（TypeScript + Express）
-└── go_server/        # Go 后端服务（Go 1.24 + net/http）
+├── go_server/          # Go后端服务（推荐）
+│   ├── config/         # 数据库配置
+│   ├── models/         # 数据模型
+│   ├── services/       # 业务服务（AI、认证、任务、CDN）
+│   ├── handlers/       # API处理器
+│   ├── middleware/     # 中间件（CORS、认证）
+│   ├── schema.sql      # 数据库表结构
+│   ├── init_db.sh      # 数据库初始化脚本
+│   └── .env.example    # 环境配置示例
+├── web/                # 前端应用
+│   └── src/
+│       ├── components/ # React组件（Auth、Navbar、TaskCenter等）
+│       ├── services/   # API服务
+│       └── types/      # TypeScript类型定义
+├── docs/               # 完整文档
+│   ├── DEPLOYMENT.md      # 部署指南
+│   ├── ARCHITECTURE.md    # 架构说明
+│   ├── PROJECT_SUMMARY.md # 项目总结
+│   └── QUICKSTART.md      # 快速参考
+└── start.sh            # 一键启动脚本
 ```
 
-## 🚀 功能特性
+## 🚀 快速开始
 
-- **产品卖点分析**: 基于关键词和竞品分析，AI 生成专业产品卖点
-- **智能图片生成**: 使用 Gemini 多模态能力生成产品营销图
-- **图片编辑**: 智能去背景、扩图等图片编辑功能
-- **A+ 页面方案**: 生成符合亚马逊规范的 A+ 页面内容方案
-- **风格参考**: 支持上传参考图，生成指定风格的产品图
+### 一键启动（推荐）
+
+```bash
+# 1. 初始化数据库
+cd go_server
+./init_db.sh          # 按提示输入数据库信息
+
+# 2. 配置环境
+cp .env.example .env  # 编辑.env文件，填入API Key和数据库配置
+
+# 3. 启动服务
+cd ..
+./start.sh            # 自动构建前端并启动后端
+
+# 4. 访问系统
+# 打开浏览器访问: http://localhost:3002
+```
+
+### 开发模式
+
+```bash
+# 终端1 - 启动后端
+cd go_server
+go run main.go        # 后端: http://localhost:3002
+
+# 终端2 - 启动前端
+cd web
+npm run dev           # 前端: http://localhost:5173
+```
 
 ## 💻 技术栈
 
-### 前端 (web/)
-- React 18
-- TypeScript
-- Vite
-- TailwindCSS
+### 后端
+- **语言**: Go 1.24
+- **数据库**: MySQL 8.0 + 连接池
+- **AI服务**: Google Gemini API
+- **安全**: bcrypt密码加密
+- **存储**: CDN + 本地备份
 
-### 后端选项
+### 前端
+- **框架**: React 19
+- **语言**: TypeScript 5.8
+- **构建**: Vite 6.2
+- **样式**: TailwindCSS 4.1
+- **动画**: Motion 12.36
 
-#### Node.js 版本 (server/)
-- Node.js + Express
-- TypeScript
-- @google/genai SDK
-- **端口**: 3001
+### 数据库
+- **引擎**: InnoDB
+- **字符集**: utf8mb4_unicode_ci
+- **表结构**: 5张核心表（用户、会话、任务、任务历史、CDN图片）
 
-#### Go 版本 (go_server/) ⚡ 新增
-- Go 1.24
-- 标准库 net/http
-- google.golang.org/genai SDK
-- **端口**: 3002
+## 🔌 API接口
 
-> **提示**: 两个后端版本功能完全一致，API 兼容。Go 版本性能更优，Node.js 版本开发更快。
-
-## 🏁 快速开始
-
-### 方式一：使用 Node.js 后端
-
-```bash
-# 1. 配置环境变量
-cd server
-cp .env.example .env
-# 编辑 .env，填入 GEMINI_API_KEY
-
-# 2. 安装依赖并启动
-npm install
-npm run dev
-
-# 服务运行在 http://localhost:3001
+### 认证接口（公开）
+```
+POST /api/auth/register    # 用户注册
+POST /api/auth/login       # 用户登录
 ```
 
-### 方式二：使用 Go 后端（推荐）
-
-```bash
-# 1. 配置环境变量
-cd go_server
-cp .env.example .env
-# 编辑 .env，填入 GEMINI_API_KEY
-
-# 2. 启动服务
-./start.sh
-
-# 或手动启动
-go mod download
-go run main.go
-
-# 服务运行在 http://localhost:3002
+### 认证接口（需登录）
+```
+POST /api/auth/logout      # 用户登出
+GET  /api/auth/me          # 获取用户信息
 ```
 
-### 启动前端
-
-```bash
-cd web
-npm install
-npm run dev
-
-# 前端运行在 http://localhost:5173
+### 任务接口（需登录）
+```
+POST /api/tasks/analyze           # 产品分析（创建任务）
+POST /api/tasks/generate-image    # 图片生成（创建任务）
+GET  /api/tasks                   # 我的任务列表
+GET  /api/tasks/all               # 全部任务列表
+GET  /api/tasks/history           # 任务历史记录
 ```
 
-## 📚 详细文档
-
-### Node.js 后端
-- 查看 [server/](./server/) 目录
-
-### Go 后端
-- [README.md](./go_server/README.md) - 完整使用文档
-- [COMPARISON.md](./go_server/COMPARISON.md) - Go vs Node.js 对比
-- [PROJECT_OVERVIEW.md](./go_server/PROJECT_OVERVIEW.md) - 项目架构总览
-- [API_EXAMPLES.md](./go_server/API_EXAMPLES.md) - API 测试示例
-
-## 🔧 环境要求
-
-### Node.js 版本
-- Node.js 18+
-- npm 或 yarn
-
-### Go 版本
-- Go 1.24+
-- 参考 [升级指南](./go_server/README.md#环境要求)
-
-### 通用要求
-- Gemini API Key（从 [Google AI Studio](https://makersuite.google.com/app/apikey) 获取）
-
-## 🆚 后端选择指南
-
-| 特性 | Node.js | Go |
-|------|---------|-----|
-| 性能 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| 开发速度 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| 部署简易度 | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| 资源占用 | ~50-80MB | ~15-30MB |
-| 并发能力 | 异步 I/O | Goroutines |
-| 启动速度 | ~2-3s | ~1s |
-
-### 选择 Node.js，如果：
-- 团队主要是前端开发者
-- 需要快速原型开发
-- 需要使用 npm 生态的特定包
-
-### 选择 Go，如果：
-- 追求最佳性能和资源利用率
-- 需要处理高并发请求
-- 简化部署流程（单文件部署）
-- 在资源受限的环境运行
-
-## 🎨 API 端点
-
-两个后端版本提供完全相同的 API：
-
-| 端点 | 方法 | 功能 |
-|------|------|------|
-| `/api/health` | GET | 健康检查 |
-| `/api/analyze` | POST | 分析产品卖点 |
-| `/api/generate-image` | POST | 生成产品图片 |
-| `/api/edit-image` | POST | 编辑图片 |
-| `/api/aplus-content` | POST | 生成 A+ 页面方案 |
-
-详细 API 文档：
-- [Node.js API](./server/)
-- [Go API 示例](./go_server/API_EXAMPLES.md)
-
-## 🚢 部署
-
-### Node.js 部署
-
-```bash
-# 构建前端
-cd web
-npm run build
-
-# 启动后端（生产模式）
-cd ../server
-npm run build
-npm run start:prod
+### 兼容接口（无需登录，保留原有功能）
+```
+POST /api/analyze          # 产品分析
+POST /api/generate-image   # 图片生成
+POST /api/edit-image       # 图片编辑
+POST /api/aplus-content    # A+内容生成
 ```
 
-### Go 部署
+## 🗄️ 数据库表
 
-```bash
-# 构建前端
-cd web
-npm run build
+| 表名 | 说明 | 字段数 |
+|------|------|--------|
+| users | 用户信息表 | 8 |
+| sessions | 用户会话表 | 4 |
+| tasks | 任务记录表 | 12 |
+| task_history | 任务历史表 | 13 |
+| cdn_images | CDN图片表 | 9 |
 
-# 编译 Go 服务器
-cd ../go_server
-go build -o go_server main.go
+## 📚 完整文档
 
-# 运行
-./go_server
+| 文档 | 说明 |
+|------|------|
+| [QUICKSTART.md](./QUICKSTART.md) | 快速参考（命令、API、故障排查） |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | 详细部署指南 |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构说明 |
+| [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) | 项目完成总结 |
+
+## ⚙️ 环境配置
+
+```env
+# Gemini API配置（必需）
+GEMINI_API_KEY=your_gemini_api_key
+
+# 服务器端口（可选）
+PORT=3002
+
+# 数据库配置（必需）
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=electric_ai_tool
+
+# CDN配置（可选，不配置时使用本地存储）
+CDN_ENDPOINT=
+CDN_BUCKET=
+CDN_ACCESS_KEY=
+CDN_SECRET_KEY=
 ```
 
-### Docker 部署
+## 🎯 使用流程
 
+1. **注册/登录** → 创建账号并登录系统
+2. **一键生图** → 上传产品图，生成营销图，自动创建任务
+3. **任务中心** → 查看所有任务记录和历史版本
+4. **用户管理** → 查看个人信息和账号状态
+
+## 🔐 安全特性
+
+- ✅ 密码bcrypt加密存储
+- ✅ 会话Token随机生成（64字节）
+- ✅ 会话自动过期（24小时）
+- ✅ SQL参数化查询（防注入）
+- ✅ CORS跨域保护
+- ✅ 认证中间件统一管理
+
+## 📊 系统特性
+
+### 性能优化
+- 数据库连接池（50个最大连接）
+- 索引优化（用户、任务、会话）
+- 分页查询支持
+- CDN加速图片访问
+
+### 可维护性
+- 模块化设计
+- 服务分层架构
+- 统一错误处理
+- 完整类型定义
+- 详细文档
+
+### 可扩展性
+- 中间件架构
+- 服务接口化
+- CDN可配置切换
+- 任务类型可扩展
+- 前端组件化
+
+## 🐛 故障排查
+
+| 问题 | 解决方案 |
+|------|----------|
+| 数据库连接失败 | 1. 检查MySQL是否运行<br>2. 检查.env配置<br>3. 运行init_db.sh |
+| 端口被占用 | 修改.env中的PORT值 |
+| API调用失败 | 1. 检查GEMINI_API_KEY<br>2. 查看后端日志 |
+| 前端构建失败 | 删除node_modules，重新npm install |
+
+## 🚢 部署建议
+
+### 开发环境
 ```bash
-# Go 版本
-cd go_server
-docker build -t electric-ai-go .
-docker run -p 3002:3002 --env-file .env electric-ai-go
-
-# Node.js 版本
-cd server
-docker build -t electric-ai-node .
-docker run -p 3001:3001 --env-file .env electric-ai-node
+./start.sh           # 使用一键启动脚本
 ```
 
-## 🧪 测试
-
-### 测试后端 API
-
+### 生产环境
 ```bash
-# Node.js
-curl http://localhost:3001/api/health
+# 1. 构建前端
+cd web && npm run build
 
-# Go
-curl http://localhost:3002/api/health
-# 或使用测试脚本
-cd go_server
-./test_api.sh
+# 2. 编译后端
+cd ../go_server && go build -o server
+
+# 3. 配置systemd或supervisor
+./server
 ```
+
+### Docker部署
+```bash
+# 待添加Dockerfile
+```
+
+## 🔄 版本历史
+
+### v2.0.0（当前版本）
+- ✅ 新增用户认证系统
+- ✅ 新增任务管理系统
+- ✅ 新增CDN图片存储
+- ✅ 新增任务历史版本
+- ✅ 新增导航栏和模块化界面
+- ✅ 数据库持久化
+- ✅ 完整文档
+
+### v1.0.0
+- 基础图片生成功能
+- 产品分析
+- A+内容生成
 
 ## 🤝 贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎提交Issue和Pull Request！
 
 ## 📄 许可证
 
-MIT License
+Apache-2.0 License
 
 ## 🔗 相关链接
 
 - [Google Gemini API](https://ai.google.dev/gemini-api)
 - [Google Gemini Go SDK](https://pkg.go.dev/google.golang.org/genai)
-- [Google Gemini Node.js SDK](https://www.npmjs.com/package/@google/genai)
+- [MySQL 8.0文档](https://dev.mysql.com/doc/refman/8.0/en/)
+- [React 19文档](https://react.dev/)
+
+## 💡 技术亮点
+
+- 🚀 **高性能**: Go语言 + 连接池，支持高并发
+- 🔒 **安全可靠**: bcrypt加密 + 会话管理 + SQL防注入
+- 📦 **开箱即用**: 一键启动脚本，5分钟完成部署
+- 🎨 **现代化UI**: React 19 + TailwindCSS，响应式设计
+- 📊 **完整追踪**: 任务系统 + 历史版本，操作可追溯
+- ☁️ **灵活存储**: CDN + 本地存储双模式
+- 📚 **文档完善**: 4份详细文档，快速上手
 
 ---
 
 **Made with ❤️ using Google Gemini AI**
+
+**🎉 升级到v2.0，体验完整的企业级功能！**

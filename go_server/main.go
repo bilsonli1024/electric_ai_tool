@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"electric_ai_tool/go_server/config"
 	"electric_ai_tool/go_server/handlers"
 	"electric_ai_tool/go_server/middleware"
 	"electric_ai_tool/go_server/services"
@@ -31,6 +32,12 @@ func main() {
 		port = "3002"
 	}
 
+	if err := config.InitDatabase(); err != nil {
+		log.Printf("⚠️  Database connection failed: %v", err)
+		log.Println("Continuing without database...")
+	}
+	defer config.CloseDatabase()
+
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
@@ -41,13 +48,34 @@ func main() {
 	}
 
 	aiService := services.NewAIService(client)
+	authService := services.NewAuthService()
+	taskService := services.NewTaskService()
+	taskHistoryService := services.NewTaskHistoryService()
+	cdnService := services.NewCDNService()
+
 	handler := handlers.NewHandler(aiService)
+	authHandler := handlers.NewAuthHandler(authService)
+	taskHandler := handlers.NewTaskHandler(aiService, taskService, taskHistoryService, cdnService, authService)
+
+	authMiddleware := middleware.NewAuthMiddleware(authService)
 
 	http.HandleFunc("/api/health", middleware.CORS(handler.Health))
+
+	http.HandleFunc("/api/auth/register", middleware.CORS(authHandler.Register))
+	http.HandleFunc("/api/auth/login", middleware.CORS(authHandler.Login))
+	http.HandleFunc("/api/auth/logout", middleware.CORS(authMiddleware.RequireAuth(authHandler.Logout)))
+	http.HandleFunc("/api/auth/me", middleware.CORS(authMiddleware.RequireAuth(authHandler.Me)))
+
 	http.HandleFunc("/api/analyze", middleware.CORS(handler.Analyze))
 	http.HandleFunc("/api/generate-image", middleware.CORS(handler.GenerateImage))
 	http.HandleFunc("/api/edit-image", middleware.CORS(handler.EditImage))
 	http.HandleFunc("/api/aplus-content", middleware.CORS(handler.APlusContent))
+
+	http.HandleFunc("/api/tasks/analyze", middleware.CORS(authMiddleware.RequireAuth(taskHandler.AnalyzeWithTask)))
+	http.HandleFunc("/api/tasks/generate-image", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GenerateImageWithTask)))
+	http.HandleFunc("/api/tasks", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetTasks)))
+	http.HandleFunc("/api/tasks/all", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetAllTasks)))
+	http.HandleFunc("/api/tasks/history", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetTaskHistory)))
 
 	distPath := filepath.Join(execDir, "../web/dist")
 	if _, err := os.Stat(distPath); err == nil {

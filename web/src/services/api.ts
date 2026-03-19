@@ -1,0 +1,118 @@
+import { User, AuthResponse, LoginRequest, RegisterRequest, Task, TaskHistory } from '../types';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+
+class ApiClient {
+  private sessionId: string | null = null;
+
+  constructor() {
+    this.sessionId = localStorage.getItem('session_id');
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    if (this.sessionId) {
+      headers['Authorization'] = `Bearer ${this.sessionId}`;
+    }
+
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new Error(error.error || 'Request failed');
+    }
+
+    return response.json();
+  }
+
+  async register(data: RegisterRequest): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    this.sessionId = response.session_id;
+    localStorage.setItem('session_id', response.session_id);
+    return response;
+  }
+
+  async login(data: LoginRequest): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    this.sessionId = response.session_id;
+    localStorage.setItem('session_id', response.session_id);
+    return response;
+  }
+
+  async logout(): Promise<void> {
+    await this.request('/api/auth/logout', { method: 'POST' });
+    this.sessionId = null;
+    localStorage.removeItem('session_id');
+  }
+
+  async me(): Promise<User> {
+    return this.request<User>('/api/auth/me');
+  }
+
+  async getTasks(params?: { limit?: number; offset?: number; type?: string }): Promise<{ data: Task[]; total: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.type) queryParams.append('type', params.type);
+
+    return this.request<{ data: Task[]; total: number }>(
+      `/api/tasks?${queryParams.toString()}`
+    );
+  }
+
+  async getAllTasks(params?: { limit?: number; offset?: number }): Promise<{ data: Task[]; total: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+
+    return this.request<{ data: Task[]; total: number }>(
+      `/api/tasks/all?${queryParams.toString()}`
+    );
+  }
+
+  async getTaskHistory(taskId: number, params?: { limit?: number; offset?: number }): Promise<{ data: TaskHistory[]; total: number }> {
+    const queryParams = new URLSearchParams({ task_id: taskId.toString() });
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+
+    return this.request<{ data: TaskHistory[]; total: number }>(
+      `/api/tasks/history?${queryParams.toString()}`
+    );
+  }
+
+  async analyzeWithTask(data: any): Promise<{ data: any; task_id: number }> {
+    return this.request('/api/tasks/analyze', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async generateImageWithTask(data: any): Promise<{ data: string; task_id: number }> {
+    return this.request('/api/tasks/generate-image', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  isAuthenticated(): boolean {
+    return this.sessionId !== null;
+  }
+}
+
+export const apiClient = new ApiClient();
