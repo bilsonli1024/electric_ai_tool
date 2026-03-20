@@ -235,6 +235,8 @@ func (s *AuthService) CreateSession(userID int64) (string, error) {
 }
 
 func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
+	log.Printf("ValidateSession: checking session %s...", sessionID[:min(8, len(sessionID))])
+	
 	var session models.Session
 	err := config.DB.QueryRow(
 		"SELECT id, user_id, expires_at FROM sessions_tab WHERE id = ?",
@@ -242,13 +244,18 @@ func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
 	).Scan(&session.ID, &session.UserID, &session.ExpiresAt)
 
 	if err == sql.ErrNoRows {
+		log.Printf("ValidateSession: session not found in database")
 		return nil, fmt.Errorf("invalid session")
 	}
 	if err != nil {
+		log.Printf("ValidateSession: database error: %v", err)
 		return nil, fmt.Errorf("failed to query session: %w", err)
 	}
 
+	log.Printf("ValidateSession: found session for user_id=%d, expires_at=%v", session.UserID, session.ExpiresAt)
+
 	if session.ExpiresAt.Before(time.Now()) {
+		log.Printf("ValidateSession: session expired at %v", session.ExpiresAt)
 		config.DB.Exec("DELETE FROM sessions_tab WHERE id = ?", sessionID)
 		return nil, fmt.Errorf("session expired")
 	}
@@ -261,10 +268,12 @@ func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
 	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt, &user.Status)
 
 	if err != nil {
+		log.Printf("ValidateSession: failed to query user: %v", err)
 		return nil, fmt.Errorf("failed to query user: %w", err)
 	}
 
 	if user.Status != 1 {
+		log.Printf("ValidateSession: user status is %d (inactive)", user.Status)
 		return nil, fmt.Errorf("user is inactive")
 	}
 
@@ -272,7 +281,15 @@ func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
 		user.LastLoginAt = &lastLoginAt.Time
 	}
 
+	log.Printf("ValidateSession: validation successful for user %s (id=%d)", user.Username, user.ID)
 	return &user, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *AuthService) Logout(sessionID string) error {

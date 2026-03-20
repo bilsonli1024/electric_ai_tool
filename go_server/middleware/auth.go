@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -27,16 +28,20 @@ func (m *AuthMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sessionID := m.getSessionID(r)
 		if sessionID == "" {
+			log.Printf("Auth failed: no session ID found in request from %s", r.RemoteAddr)
 			utils.RespondError(w, errors.New("unauthorized"), http.StatusUnauthorized)
 			return
 		}
 
+		log.Printf("Auth: validating session %s... (length: %d)", sessionID[:min(8, len(sessionID))], len(sessionID))
 		user, err := m.authService.ValidateSession(sessionID)
 		if err != nil {
+			log.Printf("Auth failed: session validation error: %v", err)
 			utils.RespondError(w, err, http.StatusUnauthorized)
 			return
 		}
 
+		log.Printf("Auth success: user_id=%d, username=%s", user.ID, user.Username)
 		r.Header.Set("X-User-ID", fmt.Sprintf("%d", user.ID))
 		r.Header.Set("X-Username", user.Username)
 
@@ -57,4 +62,11 @@ func (m *AuthMiddleware) getSessionID(r *http.Request) string {
 	}
 
 	return ""
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
