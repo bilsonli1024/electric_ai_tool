@@ -45,7 +45,7 @@ func (m *AuthMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		r.Header.Set("X-User-ID", fmt.Sprintf("%d", user.ID))
 		r.Header.Set("X-Username", user.Username)
 
-		ctx := context.WithValue(r.Context(), UserIDKey, user.ID)
+		ctx := context.WithValue(r.Context(), "user_id", user.ID)
 		next(w, r.WithContext(ctx))
 	}
 }
