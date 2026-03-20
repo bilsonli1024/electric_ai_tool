@@ -13,7 +13,7 @@ import (
 
 type contextKey string
 
-const UserIDKey contextKey = "userID"
+const UserIDKey contextKey = "user_id"
 
 type AuthMiddleware struct {
 	authService *services.AuthService
