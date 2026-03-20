@@ -85,8 +85,6 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	userID := r.Context().Value("user_id").(int64)
-
 	var req struct {
 		TaskID                    int64                      `json:"task_id"`
 		SelectedKeywords          []string                   `json:"selectedKeywords"`

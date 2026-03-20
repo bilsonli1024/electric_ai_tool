@@ -112,15 +112,15 @@ func (h *ModelTestHandler) TestAllModels(w http.ResponseWriter, r *http.Request)
 		req.Prompt = "Hello, please respond with 'Connection successful' in English."
 	}
 
-	models := []string{
+	modelsList := []string{
 		models.ModelGemini,
 		models.ModelGPT,
 		models.ModelDeepSeek,
 	}
 
-	results := make([]ModelTestResponse, 0, len(models))
+	results := make([]ModelTestResponse, 0, len(modelsList))
 
-	for _, model := range models {
+	for _, model := range modelsList {
 		startTime := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 

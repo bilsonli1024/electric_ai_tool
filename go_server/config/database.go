@@ -50,6 +50,10 @@ func InitDatabase() error {
 	return nil
 }
 
+func GetDB() *sql.DB {
+	return DB
+}
+
 func CloseDatabase() {
 	if DB != nil {
 		DB.Close()
