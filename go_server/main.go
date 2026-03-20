@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"electric_ai_tool/go_server/config"
+	"electric_ai_tool/go_server/domain"
 	"electric_ai_tool/go_server/handlers"
 	"electric_ai_tool/go_server/middleware"
 	"electric_ai_tool/go_server/services"
@@ -53,6 +54,7 @@ func main() {
 		log.Fatalf("Failed to create Gemini client: %v", err)
 	}
 
+	// Initialize services
 	aiService := services.NewAIService(client)
 	multiModelService := services.NewMultiModelService(client)
 	authService := services.NewAuthService()
@@ -68,45 +70,33 @@ func main() {
 		log.Printf("⚠️  Failed to initialize RBAC: %v", err)
 	}
 
-	handler := handlers.NewHandler(aiService)
-	authHandler := handlers.NewAuthHandler(authService, emailService)
-	taskHandler := handlers.NewTaskHandler(multiModelService, taskService, taskHistoryService, cdnService, authService)
-	modelTestHandler := handlers.NewModelTestHandler(multiModelService)
-	copywritingHandler := handlers.NewCopywritingHandler(copywritingService, authService)
-
+	// Auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(authService)
 
+	// Health check
+	handler := handlers.NewHandler(aiService)
 	http.HandleFunc("/api/health", middleware.LoggingMiddleware(middleware.CORS(handler.Health)))
 
-	http.HandleFunc("/api/auth/register", middleware.LoggingMiddleware(middleware.CORS(authHandler.Register)))
-	http.HandleFunc("/api/auth/login", middleware.LoggingMiddleware(middleware.CORS(authHandler.Login)))
-	http.HandleFunc("/api/auth/logout", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(authHandler.Logout))))
-	http.HandleFunc("/api/auth/me", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(authHandler.Me))))
-	http.HandleFunc("/api/auth/forgot-password", middleware.LoggingMiddleware(middleware.CORS(authHandler.ForgotPassword)))
-	http.HandleFunc("/api/auth/reset-password", middleware.LoggingMiddleware(middleware.CORS(authHandler.ResetPassword)))
-	http.HandleFunc("/api/auth/send-verification-code", middleware.LoggingMiddleware(middleware.CORS(authHandler.SendVerificationCode)))
-	http.HandleFunc("/api/auth/test-send-verification-code", middleware.LoggingMiddleware(middleware.CORS(authHandler.TestSendVerificationCode)))
+	// Legacy API routes (to be removed later)
+	http.HandleFunc("/api/analyze", middleware.LoggingMiddleware(middleware.CORS(handler.Analyze)))
+	http.HandleFunc("/api/generate-image", middleware.LoggingMiddleware(middleware.CORS(handler.GenerateImage)))
+	http.HandleFunc("/api/edit-image", middleware.LoggingMiddleware(middleware.CORS(handler.EditImage)))
+	http.HandleFunc("/api/aplus-content", middleware.LoggingMiddleware(middleware.CORS(handler.APlusContent)))
 
-	http.HandleFunc("/api/analyze", middleware.CORS(handler.Analyze))
-	http.HandleFunc("/api/generate-image", middleware.CORS(handler.GenerateImage))
-	http.HandleFunc("/api/edit-image", middleware.CORS(handler.EditImage))
-	http.HandleFunc("/api/aplus-content", middleware.CORS(handler.APlusContent))
+	// Register domain routes (DDD pattern)
+	authDomain := domain.NewAuthDomain(authService, emailService)
+	authDomain.RegisterRoutes(authMiddleware)
 
-	http.HandleFunc("/api/tasks/analyze", middleware.CORS(authMiddleware.RequireAuth(taskHandler.AnalyzeWithTask)))
-	http.HandleFunc("/api/tasks/generate-image", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GenerateImageWithTask)))
-	http.HandleFunc("/api/tasks", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetTasks)))
-	http.HandleFunc("/api/tasks/all", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetAllTasks)))
-	http.HandleFunc("/api/tasks/history", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetTaskHistory)))
+	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService)
+	taskDomain.RegisterRoutes(authMiddleware)
 
-	http.HandleFunc("/api/models/test", middleware.CORS(authMiddleware.RequireAuth(modelTestHandler.TestModel)))
-	http.HandleFunc("/api/models/test-all", middleware.CORS(authMiddleware.RequireAuth(modelTestHandler.TestAllModels)))
+	modelDomain := domain.NewModelDomain(multiModelService)
+	modelDomain.RegisterRoutes(authMiddleware)
 
-	http.HandleFunc("/api/copywriting/analyze", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.AnalyzeCompetitors)))
-	http.HandleFunc("/api/copywriting/generate", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GenerateCopy)))
-	http.HandleFunc("/api/copywriting/tasks", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GetTasks)))
-	http.HandleFunc("/api/copywriting/task", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GetTask)))
-	http.HandleFunc("/api/copywriting/search", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.SearchTasks)))
+	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService)
+	copywritingDomain.RegisterRoutes(authMiddleware)
 
+	// Static file serving
 	distPath := filepath.Join(execDir, "../web/dist")
 	if _, err := os.Stat(distPath); err == nil {
 		fs := http.FileServer(http.Dir(distPath))

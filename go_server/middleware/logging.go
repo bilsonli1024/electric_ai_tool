@@ -34,12 +34,12 @@ func LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			status:        http.StatusOK,
 		}
 		
-		defer func() {
-			if rec := recover(); err != nil {
-				log.Printf("✗ PANIC [%s] %s: %v", r.Method, r.URL.Path, rec)
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			}
-		}()
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("✗ PANIC [%s] %s: %v", r.Method, r.URL.Path, rec)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}()
 		
 		next(wrapped, r)
 		
