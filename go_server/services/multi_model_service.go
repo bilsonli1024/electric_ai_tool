@@ -23,6 +23,20 @@ func NewMultiModelService(geminiClient *genai.Client) *MultiModelService {
 	}
 }
 
+// TestChat 简单的聊天测试接口，用于模型连通性测试
+func (s *MultiModelService) TestChat(ctx context.Context, model string, prompt string) (string, error) {
+	switch model {
+	case models.ModelGemini:
+		return s.testChatWithGemini(ctx, prompt)
+	case models.ModelGPT:
+		return s.testChatWithGPT(ctx, prompt)
+	case models.ModelDeepSeek:
+		return s.testChatWithDeepSeek(ctx, prompt)
+	default:
+		return "", fmt.Errorf("unsupported model: %s", model)
+	}
+}
+
 func (s *MultiModelService) AnalyzeSellingPoints(ctx context.Context, req models.AnalyzeRequest) ([]models.SellingPoint, error) {
 	model := req.Model
 	if model == "" {
@@ -105,7 +119,7 @@ SKU: %s
 		ResponseSchema:   schema,
 	}
 
-	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-1.5-flash", contents, config)
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +262,7 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 		ResponseModalities: []string{"IMAGE", "TEXT"},
 	}
 
-	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-1.5-flash", contents, config)
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
 	if err != nil {
 		return "", err
 	}
@@ -318,3 +332,47 @@ func callOpenAICompatibleChat(apiBase, apiKey, prompt string, modelName string) 
 
 	return response.Choices[0].Message.Content, nil
 }
+
+// 测试聊天方法
+
+func (s *MultiModelService) testChatWithGemini(ctx context.Context, prompt string) (string, error) {
+	parts := []*genai.Part{{Text: prompt}}
+	contents := []*genai.Content{{Parts: parts}}
+
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
+		if textPart := resp.Candidates[0].Content.Parts[0].Text; textPart != "" {
+			return textPart, nil
+		}
+	}
+
+	return "", fmt.Errorf("empty response from Gemini")
+}
+
+func (s *MultiModelService) testChatWithGPT(ctx context.Context, prompt string) (string, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY not configured")
+	}
+
+	return callOpenAIChat(apiKey, prompt)
+}
+
+func (s *MultiModelService) testChatWithDeepSeek(ctx context.Context, prompt string) (string, error) {
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("DEEPSEEK_API_KEY not configured")
+	}
+
+	apiBase := os.Getenv("DEEPSEEK_API_BASE")
+	if apiBase == "" {
+		apiBase = "https://api.deepseek.com/v1"
+	}
+
+	return callOpenAICompatibleChat(apiBase, apiKey, prompt, "deepseek-chat")
+}
+

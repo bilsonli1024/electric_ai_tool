@@ -58,14 +58,7 @@ func (h *ModelTestHandler) TestModel(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	analyzeReq := models.AnalyzeRequest{
-		SKU:           "TEST-001",
-		Keywords:      "test product",
-		SellingPoints: req.Prompt,
-		Model:         req.Model,
-	}
-
-	result, err := h.multiModelService.AnalyzeSellingPoints(ctx, analyzeReq)
+	result, err := h.multiModelService.TestChat(ctx, req.Model, req.Prompt)
 	responseTime := time.Since(startTime).Milliseconds()
 
 	if err != nil {
@@ -78,18 +71,10 @@ func (h *ModelTestHandler) TestModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var responseText string
-	if len(result) > 0 {
-		responseText = result[0].TitleCN
-		if responseText == "" {
-			responseText = result[0].Title
-		}
-	}
-
 	utils.RespondJSON(w, ModelTestResponse{
 		Success:      true,
 		Model:        req.Model,
-		Response:     responseText,
+		Response:     result,
 		ResponseTime: responseTime,
 	})
 }
@@ -124,14 +109,7 @@ func (h *ModelTestHandler) TestAllModels(w http.ResponseWriter, r *http.Request)
 		startTime := time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-		analyzeReq := models.AnalyzeRequest{
-			SKU:           "TEST-001",
-			Keywords:      "test product",
-			SellingPoints: req.Prompt,
-			Model:         model,
-		}
-
-		result, err := h.multiModelService.AnalyzeSellingPoints(ctx, analyzeReq)
+		result, err := h.multiModelService.TestChat(ctx, model, req.Prompt)
 		responseTime := time.Since(startTime).Milliseconds()
 		cancel()
 
@@ -143,18 +121,10 @@ func (h *ModelTestHandler) TestAllModels(w http.ResponseWriter, r *http.Request)
 				ResponseTime: responseTime,
 			})
 		} else {
-			var responseText string
-			if len(result) > 0 {
-				responseText = result[0].TitleCN
-				if responseText == "" {
-					responseText = result[0].Title
-				}
-			}
-
 			results = append(results, ModelTestResponse{
 				Success:      true,
 				Model:        model,
-				Response:     responseText,
+				Response:     result,
 				ResponseTime: responseTime,
 			})
 		}
