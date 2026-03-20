@@ -22,6 +22,12 @@ func main() {
 	godotenv.Load(filepath.Join(execDir, ".env"))
 	godotenv.Load(filepath.Join(execDir, "../web/.env"))
 
+	// Initialize logger with rotation
+	logDir := filepath.Join(execDir, "logs")
+	if err := config.InitLogger(logDir); err != nil {
+		log.Printf("⚠️  Failed to initialize logger: %v", err)
+	}
+
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		log.Fatal("GEMINI_API_KEY not set in environment")
@@ -70,15 +76,16 @@ func main() {
 
 	authMiddleware := middleware.NewAuthMiddleware(authService)
 
-	http.HandleFunc("/api/health", middleware.CORS(handler.Health))
+	http.HandleFunc("/api/health", middleware.LoggingMiddleware(middleware.CORS(handler.Health)))
 
-	http.HandleFunc("/api/auth/register", middleware.CORS(authHandler.Register))
-	http.HandleFunc("/api/auth/login", middleware.CORS(authHandler.Login))
-	http.HandleFunc("/api/auth/logout", middleware.CORS(authMiddleware.RequireAuth(authHandler.Logout)))
-	http.HandleFunc("/api/auth/me", middleware.CORS(authMiddleware.RequireAuth(authHandler.Me)))
-	http.HandleFunc("/api/auth/forgot-password", middleware.CORS(authHandler.ForgotPassword))
-	http.HandleFunc("/api/auth/reset-password", middleware.CORS(authHandler.ResetPassword))
-	http.HandleFunc("/api/auth/send-verification-code", middleware.CORS(authHandler.SendVerificationCode))
+	http.HandleFunc("/api/auth/register", middleware.LoggingMiddleware(middleware.CORS(authHandler.Register)))
+	http.HandleFunc("/api/auth/login", middleware.LoggingMiddleware(middleware.CORS(authHandler.Login)))
+	http.HandleFunc("/api/auth/logout", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(authHandler.Logout))))
+	http.HandleFunc("/api/auth/me", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(authHandler.Me))))
+	http.HandleFunc("/api/auth/forgot-password", middleware.LoggingMiddleware(middleware.CORS(authHandler.ForgotPassword)))
+	http.HandleFunc("/api/auth/reset-password", middleware.LoggingMiddleware(middleware.CORS(authHandler.ResetPassword)))
+	http.HandleFunc("/api/auth/send-verification-code", middleware.LoggingMiddleware(middleware.CORS(authHandler.SendVerificationCode)))
+	http.HandleFunc("/api/auth/test-send-verification-code", middleware.LoggingMiddleware(middleware.CORS(authHandler.TestSendVerificationCode)))
 
 	http.HandleFunc("/api/analyze", middleware.CORS(handler.Analyze))
 	http.HandleFunc("/api/generate-image", middleware.CORS(handler.GenerateImage))

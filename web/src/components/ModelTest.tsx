@@ -9,6 +9,14 @@ interface ModelTestResult {
   response_time_ms: number;
 }
 
+interface EmailTestResult {
+  success: boolean;
+  message?: string;
+  code?: string;
+  email?: string;
+  error?: string;
+}
+
 export const ModelTest: React.FC = () => {
   const [testResults, setTestResults] = useState<{ [key: string]: ModelTestResult | null }>({
     gemini: null,
@@ -24,8 +32,11 @@ export const ModelTest: React.FC = () => {
     gemini: false,
     gpt: false,
     deepseek: false,
+    email: false,
   });
   const [testingAll, setTestingAll] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<EmailTestResult | null>(null);
+  const [testEmail, setTestEmail] = useState('');
 
   const testModel = async (model: string) => {
     setLoading({ ...loading, [model]: true });
@@ -71,6 +82,44 @@ export const ModelTest: React.FC = () => {
     }
   };
 
+  const testEmailVerification = async () => {
+    setLoading({ ...loading, email: true });
+    setEmailTestResult(null);
+
+    try {
+      const response = await fetch('http://43.160.241.164:4002/api/auth/test-send-verification-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: testEmail }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setEmailTestResult({
+          success: true,
+          message: data.message,
+          code: data.code,
+          email: data.email,
+        });
+      } else {
+        setEmailTestResult({
+          success: false,
+          error: data.error || '测试失败',
+        });
+      }
+    } catch (err: any) {
+      setEmailTestResult({
+        success: false,
+        error: err.message || '网络请求失败',
+      });
+    } finally {
+      setLoading({ ...loading, email: false });
+    }
+  };
+
   const getStatusIcon = (result: ModelTestResult | null) => {
     if (!result) return null;
     if (result.success) {
@@ -111,9 +160,96 @@ export const ModelTest: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-800 mb-2">模型连通性测试</h2>
-        <p className="text-gray-600">测试各AI模型的API连接状态和响应速度</p>
+        <h2 className="text-3xl font-bold text-gray-800 mb-2">联通性测试</h2>
+        <p className="text-gray-600">测试AI模型和邮件服务的连接状态和响应速度</p>
       </div>
+
+      {/* 邮箱验证码测试卡片 */}
+      <div className="mb-8 bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="h-2 bg-gradient-to-r from-orange-500 to-red-500"></div>
+        
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-800">📧 邮箱验证码测试</h3>
+            {emailTestResult && (
+              emailTestResult.success ? (
+                <svg className="w-6 h-6 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              )
+            )}
+          </div>
+
+          <p className="text-sm text-gray-600 mb-4">测试邮箱验证码生成和发送功能（验证码将显示在后端日志）</p>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              测试邮箱地址
+            </label>
+            <input
+              type="email"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+              placeholder="输入邮箱地址，如 test@example.com"
+            />
+          </div>
+
+          <button
+            onClick={testEmailVerification}
+            disabled={loading.email || !testEmail}
+            className="w-full px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            {loading.email ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                测试中...
+              </span>
+            ) : (
+              '测试邮箱验证码'
+            )}
+          </button>
+
+          {emailTestResult && (
+            <div className={`mt-4 p-4 rounded-lg ${emailTestResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+              <div className="mb-2">
+                <span className={`text-sm font-medium ${emailTestResult.success ? 'text-green-800' : 'text-red-800'}`}>
+                  {emailTestResult.success ? '测试成功' : '测试失败'}
+                </span>
+              </div>
+
+              {emailTestResult.success && (
+                <div className="space-y-2">
+                  <div className="text-sm text-green-700 bg-white p-2 rounded border border-green-100">
+                    <strong>邮箱:</strong> {emailTestResult.email}
+                  </div>
+                  <div className="text-sm text-green-700 bg-white p-2 rounded border border-green-100">
+                    <strong>验证码:</strong> <span className="font-mono text-lg font-bold">{emailTestResult.code}</span>
+                  </div>
+                  <div className="text-xs text-green-600 mt-2">
+                    💡 提示：请查看后端服务器日志获取完整的验证码发送信息
+                  </div>
+                </div>
+              )}
+
+              {!emailTestResult.success && emailTestResult.error && (
+                <div className="text-sm text-red-700 mt-2">
+                  <strong>错误:</strong> {emailTestResult.error}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <h3 className="text-2xl font-bold text-gray-800 mb-4">AI模型测试</h3>
 
       <div className="mb-6">
         <button
@@ -130,7 +266,7 @@ export const ModelTest: React.FC = () => {
               测试所有模型中...
             </span>
           ) : (
-            '一键测试所有模型'
+            '一键测试所有AI模型'
           )}
         </button>
       </div>

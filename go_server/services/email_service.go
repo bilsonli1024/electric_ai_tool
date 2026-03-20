@@ -84,3 +84,12 @@ func (s *EmailService) SendVerificationCode(email, code, purpose string) error {
 	fmt.Printf("📧 Send verification code to %s: %s (purpose: %s)\n", email, code, purpose)
 	return nil
 }
+
+func (s *EmailService) SendTestEmail(email, code string) error {
+	fmt.Printf("🧪 TEST EMAIL - To: %s, Code: %s\n", email, code)
+	fmt.Printf("==========================================\n")
+	fmt.Printf("Email: %s\n", email)
+	fmt.Printf("Verification Code: %s\n", code)
+	fmt.Printf("==========================================\n")
+	return nil
+}

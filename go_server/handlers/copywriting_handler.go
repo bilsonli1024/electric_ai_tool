@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -228,8 +229,13 @@ func (h *CopywritingHandler) SearchTasks(w http.ResponseWriter, r *http.Request)
 
 	tasks, err := h.copywritingService.SearchCompletedTasks(userID, keyword, limit)
 	if err != nil {
+		log.Printf("SearchTasks error: %v", err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
+	}
+
+	if tasks == nil {
+		tasks = []*models.CopywritingTask{}
 	}
 
 	utils.RespondJSON(w, map[string]interface{}{

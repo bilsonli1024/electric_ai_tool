@@ -180,6 +180,34 @@ func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Reques
 	utils.RespondJSON(w, map[string]string{"message": "验证码已发送"})
 }
 
+func (h *AuthHandler) TestSendVerificationCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	code := h.emailService.GenerateCode()
+	
+	if err := h.emailService.SendTestEmail(req.Email, code); err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	utils.RespondJSON(w, map[string]interface{}{
+		"message": "测试验证码已生成（请查看后端日志）",
+		"code":    code,
+		"email":   req.Email,
+	})
+}
+
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get("Authorization")
 	if sessionID != "" && len(sessionID) > 7 {

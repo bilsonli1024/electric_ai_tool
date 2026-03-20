@@ -11,25 +11,39 @@ export const TaskCenter: React.FC = () => {
   const limit = 20;
 
   useEffect(() => {
+    let cancelled = false;
+    
+    const loadTasks = async () => {
+      setLoading(true);
+      try {
+        const offset = (page - 1) * limit;
+        const response = viewMode === 'my'
+          ? await apiClient.getTasks({ limit, offset })
+          : await apiClient.getAllTasks({ limit, offset });
+        
+        if (!cancelled) {
+          setTasks(response?.data || []);
+          setTotal(response?.total || 0);
+        }
+      } catch (err) {
+        console.error('Failed to load tasks:', err);
+        if (!cancelled) {
+          setTasks([]);
+          setTotal(0);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+    
     loadTasks();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [page, viewMode]);
-
-  const loadTasks = async () => {
-    setLoading(true);
-    try {
-      const offset = (page - 1) * limit;
-      const response = viewMode === 'my'
-        ? await apiClient.getTasks({ limit, offset })
-        : await apiClient.getAllTasks({ limit, offset });
-      
-      setTasks(response.data);
-      setTotal(response.total);
-    } catch (err) {
-      console.error('Failed to load tasks:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -114,7 +128,7 @@ export const TaskCenter: React.FC = () => {
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
           <p className="mt-4 text-gray-600">加载中...</p>
         </div>
-      ) : tasks.length === 0 ? (
+      ) : !tasks || tasks.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <p className="text-gray-500">暂无任务</p>
         </div>

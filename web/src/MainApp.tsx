@@ -107,7 +107,7 @@ export const MainApp: React.FC = () => {
                 : 'text-gray-700 hover:bg-gray-50'
             }`}
           >
-            🧪 模型测试
+            🧪 联通性测试
           </button>
           <button
             onClick={() => setCurrentPage('user')}
