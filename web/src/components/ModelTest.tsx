@@ -39,24 +39,24 @@ export const ModelTest: React.FC = () => {
   const [testEmail, setTestEmail] = useState('');
 
   const testModel = async (model: string) => {
-    setLoading({ ...loading, [model]: true });
-    setTestResults({ ...testResults, [model]: null });
+    setLoading((prev) => ({ ...prev, [model]: true }));
+    setTestResults((prev) => ({ ...prev, [model]: null }));
 
     try {
       const result = await apiClient.testModel(model, testPrompts[model]);
-      setTestResults({ ...testResults, [model]: result });
+      setTestResults((prev) => ({ ...prev, [model]: result }));
     } catch (err: any) {
-      setTestResults({
-        ...testResults,
+      setTestResults((prev) => ({
+        ...prev,
         [model]: {
           success: false,
           model,
           error: err.message,
           response_time_ms: 0,
         },
-      });
+      }));
     } finally {
-      setLoading({ ...loading, [model]: false });
+      setLoading((prev) => ({ ...prev, [model]: false }));
     }
   };
 
@@ -83,7 +83,7 @@ export const ModelTest: React.FC = () => {
   };
 
   const testEmailVerification = async () => {
-    setLoading({ ...loading, email: true });
+    setLoading((prev) => ({ ...prev, email: true }));
     setEmailTestResult(null);
 
     try {
@@ -116,7 +116,7 @@ export const ModelTest: React.FC = () => {
         error: err.message || '网络请求失败',
       });
     } finally {
-      setLoading({ ...loading, email: false });
+      setLoading((prev) => ({ ...prev, email: false }));
     }
   };
 

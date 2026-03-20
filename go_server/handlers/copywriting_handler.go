@@ -32,7 +32,19 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	userID := r.Context().Value("user_id").(int64)
+	userIDValue := r.Context().Value("user_id")
+	if userIDValue == nil {
+		log.Printf("AnalyzeCompetitors error: user_id not found in context")
+		utils.RespondError(w, fmt.Errorf("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		log.Printf("AnalyzeCompetitors error: user_id is not int64, got %T", userIDValue)
+		utils.RespondError(w, fmt.Errorf("invalid user_id"), http.StatusUnauthorized)
+		return
+	}
 
 	var req models.AnalyzeCompetitorsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -148,7 +160,19 @@ func (h *CopywritingHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.Context().Value("user_id").(int64)
+	userIDValue := r.Context().Value("user_id")
+	if userIDValue == nil {
+		log.Printf("GetTasks error: user_id not found in context")
+		utils.RespondError(w, fmt.Errorf("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		log.Printf("GetTasks error: user_id is not int64, got %T", userIDValue)
+		utils.RespondError(w, fmt.Errorf("invalid user_id"), http.StatusUnauthorized)
+		return
+	}
 
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
