@@ -16,13 +16,13 @@ func NewTaskHistoryService() *TaskHistoryService {
 }
 
 func (s *TaskHistoryService) CreateHistory(history *models.TaskHistory) error {
-	query := `SELECT COALESCE(MAX(version), 0) + 1 FROM task_history WHERE task_id = ?`
+	query := `SELECT COALESCE(MAX(version), 0) + 1 FROM task_history_tab WHERE task_id = ?`
 	err := config.DB.QueryRow(query, history.TaskID).Scan(&history.Version)
 	if err != nil {
 		history.Version = 1
 	}
 
-	insertQuery := `INSERT INTO task_history (task_id, user_id, version, prompt, aspect_ratio, 
+	insertQuery := `INSERT INTO task_history_tab (task_id, user_id, version, prompt, aspect_ratio, 
                     product_images_urls, style_ref_image_url, generated_image_url, edit_instruction, status, error_message) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
@@ -45,7 +45,7 @@ func (s *TaskHistoryService) GetTaskHistory(taskID int64, limit int, offset int)
 	var histories []models.TaskHistory
 	var total int
 
-	countQuery := `SELECT COUNT(*) FROM task_history WHERE task_id = ?`
+	countQuery := `SELECT COUNT(*) FROM task_history_tab WHERE task_id = ?`
 	err := config.DB.QueryRow(countQuery, taskID).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count history: %w", err)
@@ -54,7 +54,7 @@ func (s *TaskHistoryService) GetTaskHistory(taskID int64, limit int, offset int)
 	query := `SELECT id, task_id, user_id, version, prompt, aspect_ratio, 
               product_images_urls, style_ref_image_url, generated_image_url, 
               edit_instruction, status, error_message, created_at 
-              FROM task_history WHERE task_id = ? 
+              FROM task_history_tab WHERE task_id = ? 
               ORDER BY version DESC LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, taskID, limit, offset)
@@ -103,7 +103,7 @@ func (s *TaskHistoryService) GetLatestHistory(taskID int64) (*models.TaskHistory
 	query := `SELECT id, task_id, user_id, version, prompt, aspect_ratio, 
               product_images_urls, style_ref_image_url, generated_image_url, 
               edit_instruction, status, error_message, created_at 
-              FROM task_history WHERE task_id = ? 
+              FROM task_history_tab WHERE task_id = ? 
               ORDER BY version DESC LIMIT 1`
 
 	history := &models.TaskHistory{}

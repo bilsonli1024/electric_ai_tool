@@ -63,7 +63,7 @@ func (s *CDNService) UploadImage(userID int64, dataURL string, imageType string)
 		CreatedAt: time.Now(),
 	}
 
-	query := `INSERT INTO cdn_images (user_id, cdn_url, cdn_key, file_size, mime_type, image_type) 
+	query := `INSERT INTO cdn_images_tab (user_id, cdn_url, cdn_key, file_size, mime_type, image_type) 
               VALUES (?, ?, ?, ?, ?, ?)`
 	result, err := config.DB.Exec(query, cdnImage.UserID, cdnImage.CDNURL, cdnImage.CDNKey, cdnImage.FileSize, cdnImage.MimeType, cdnImage.ImageType)
 	if err != nil {
@@ -106,7 +106,7 @@ func (s *CDNService) UploadFromMultipart(userID int64, file multipart.File, head
 		CreatedAt:        time.Now(),
 	}
 
-	query := `INSERT INTO cdn_images (user_id, original_filename, cdn_url, cdn_key, file_size, mime_type, image_type) 
+	query := `INSERT INTO cdn_images_tab (user_id, original_filename, cdn_url, cdn_key, file_size, mime_type, image_type) 
               VALUES (?, ?, ?, ?, ?, ?, ?)`
 	result, err := config.DB.Exec(query, cdnImage.UserID, cdnImage.OriginalFilename, cdnImage.CDNURL, cdnImage.CDNKey, cdnImage.FileSize, cdnImage.MimeType, cdnImage.ImageType)
 	if err != nil {

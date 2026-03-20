@@ -29,7 +29,7 @@ func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error)
 	}
 
 	var count int
-	err := config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", req.Email).Scan(&count)
+	err := config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE email = ?", req.Email).Scan(&count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing user: %w", err)
 	}
@@ -44,7 +44,7 @@ func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error)
 	username = s.ensureUniqueUsername(username)
 
 	result, err := config.DB.Exec(
-		"INSERT INTO users (username, email, password_hash, salt) VALUES (?, ?, ?, ?)",
+		"INSERT INTO users_tab (username, email, password_hash, salt) VALUES (?, ?, ?, ?)",
 		username, req.Email, finalHash, salt,
 	)
 	if err != nil {
@@ -71,14 +71,15 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, erro
 	var query string
 	
 	if s.isValidEmail(req.LoginID) {
-		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, last_login_at, status FROM users WHERE email = ?"
+		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, status FROM users_tab WHERE email = ?"
 	} else {
-		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, last_login_at, status FROM users WHERE username = ?"
+		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, status FROM users_tab WHERE username = ?"
 	}
 
+	var lastLoginAt sql.NullTime
 	err := config.DB.QueryRow(query, req.LoginID).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Salt,
-		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt, &user.Status,
+		&user.CreatedAt, &user.UpdatedAt, &user.Status,
 	)
 
 	if err == sql.ErrNoRows {
@@ -102,7 +103,11 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, erro
 		return nil, "", err
 	}
 
-	config.DB.Exec("UPDATE users SET last_login_at = ? WHERE id = ?", time.Now(), user.ID)
+	s.logUserLogin(user.ID, sessionID, models.LoginTypeLogin, req.LoginIP, req.UserAgent)
+
+	if lastLoginAt.Valid {
+		user.LastLoginAt = &lastLoginAt.Time
+	}
 
 	return &user, sessionID, nil
 }
@@ -117,7 +122,7 @@ func (s *AuthService) ForgotPassword(req models.ForgotPasswordRequest) error {
 	}
 
 	var userID int64
-	err := config.DB.QueryRow("SELECT id FROM users WHERE email = ?", req.Email).Scan(&userID)
+	err := config.DB.QueryRow("SELECT id FROM users_tab WHERE email = ?", req.Email).Scan(&userID)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -129,7 +134,7 @@ func (s *AuthService) ForgotPassword(req models.ForgotPasswordRequest) error {
 	expiresAt := time.Now().Add(1 * time.Hour)
 
 	_, err = config.DB.Exec(
-		"INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+		"INSERT INTO password_reset_tokens_tab (user_id, token, expires_at) VALUES (?, ?, ?)",
 		userID, token, expiresAt,
 	)
 	if err != nil {
@@ -146,7 +151,7 @@ func (s *AuthService) ResetPassword(req models.ResetPasswordRequest) error {
 
 	var tokenRecord models.PasswordResetToken
 	err := config.DB.QueryRow(
-		"SELECT id, user_id, token, expires_at, used FROM password_reset_tokens WHERE token = ?",
+		"SELECT id, user_id, token, expires_at, used FROM password_reset_tokens_tab WHERE token = ?",
 		req.Token,
 	).Scan(&tokenRecord.ID, &tokenRecord.UserID, &tokenRecord.Token, &tokenRecord.ExpiresAt, &tokenRecord.Used)
 
@@ -175,7 +180,7 @@ func (s *AuthService) ResetPassword(req models.ResetPasswordRequest) error {
 	defer tx.Rollback()
 
 	_, err = tx.Exec(
-		"UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
+		"UPDATE users_tab SET password_hash = ?, salt = ? WHERE id = ?",
 		finalHash, salt, tokenRecord.UserID,
 	)
 	if err != nil {
@@ -183,14 +188,14 @@ func (s *AuthService) ResetPassword(req models.ResetPasswordRequest) error {
 	}
 
 	_, err = tx.Exec(
-		"UPDATE password_reset_tokens SET used = 1 WHERE id = ?",
+		"UPDATE password_reset_tokens_tab SET used = 1 WHERE id = ?",
 		tokenRecord.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to mark token as used: %w", err)
 	}
 
-	_, err = tx.Exec("DELETE FROM sessions WHERE user_id = ?", tokenRecord.UserID)
+	_, err = tx.Exec("DELETE FROM sessions_tab WHERE user_id = ?", tokenRecord.UserID)
 	if err != nil {
 		return fmt.Errorf("failed to invalidate sessions: %w", err)
 	}
@@ -207,7 +212,7 @@ func (s *AuthService) CreateSession(userID int64) (string, error) {
 	expiresAt := time.Now().Add(24 * time.Hour)
 
 	_, err := config.DB.Exec(
-		"INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
+		"INSERT INTO sessions_tab (id, user_id, expires_at) VALUES (?, ?, ?)",
 		sessionID, userID, expiresAt,
 	)
 	if err != nil {
@@ -220,7 +225,7 @@ func (s *AuthService) CreateSession(userID int64) (string, error) {
 func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
 	var session models.Session
 	err := config.DB.QueryRow(
-		"SELECT id, user_id, expires_at FROM sessions WHERE id = ?",
+		"SELECT id, user_id, expires_at FROM sessions_tab WHERE id = ?",
 		sessionID,
 	).Scan(&session.ID, &session.UserID, &session.ExpiresAt)
 
@@ -232,15 +237,16 @@ func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
 	}
 
 	if session.ExpiresAt.Before(time.Now()) {
-		config.DB.Exec("DELETE FROM sessions WHERE id = ?", sessionID)
+		config.DB.Exec("DELETE FROM sessions_tab WHERE id = ?", sessionID)
 		return nil, fmt.Errorf("session expired")
 	}
 
 	var user models.User
+	var lastLoginAt sql.NullTime
 	err = config.DB.QueryRow(
-		"SELECT id, username, email, created_at, updated_at, last_login_at, status FROM users WHERE id = ?",
+		"SELECT id, username, email, created_at, updated_at, status FROM users_tab WHERE id = ?",
 		session.UserID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt, &user.Status)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt, &user.Status)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to query user: %w", err)
@@ -250,15 +256,45 @@ func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
 		return nil, fmt.Errorf("user is inactive")
 	}
 
+	if lastLoginAt.Valid {
+		user.LastLoginAt = &lastLoginAt.Time
+	}
+
 	return &user, nil
 }
 
 func (s *AuthService) Logout(sessionID string) error {
-	_, err := config.DB.Exec("DELETE FROM sessions WHERE id = ?", sessionID)
+	var userID int64
+	config.DB.QueryRow("SELECT user_id FROM sessions_tab WHERE id = ?", sessionID).Scan(&userID)
+	
+	_, err := config.DB.Exec("DELETE FROM sessions_tab WHERE id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
+	
+	if userID > 0 {
+		s.logUserLogin(userID, sessionID, models.LoginTypeLogout, "", "")
+	}
+	
 	return nil
+}
+
+func (s *AuthService) SwitchUser(oldSessionID string, newUserID int64) error {
+	var oldUserID int64
+	config.DB.QueryRow("SELECT user_id FROM sessions_tab WHERE id = ?", oldSessionID).Scan(&oldUserID)
+	
+	if oldUserID > 0 {
+		s.logUserLogin(oldUserID, oldSessionID, models.LoginTypeSwitch, "", "")
+	}
+	
+	return nil
+}
+
+func (s *AuthService) logUserLogin(userID int64, sessionID string, loginType int, loginIP string, userAgent string) {
+	config.DB.Exec(
+		"INSERT INTO user_login_log_tab (user_id, login_type, login_ip, user_agent, session_id) VALUES (?, ?, ?, ?, ?)",
+		userID, loginType, loginIP, userAgent, sessionID,
+	)
 }
 
 func (s *AuthService) hashPasswordWithSalt(passwordHash string, salt string) string {
@@ -300,7 +336,7 @@ func (s *AuthService) generateUsernameFromEmail(email string) string {
 
 func (s *AuthService) ensureUniqueUsername(username string) string {
 	var count int
-	config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", username).Scan(&count)
+	config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE username = ?", username).Scan(&count)
 	
 	if count == 0 {
 		return username
@@ -308,7 +344,7 @@ func (s *AuthService) ensureUniqueUsername(username string) string {
 
 	for i := 1; i < 10000; i++ {
 		testUsername := fmt.Sprintf("%s%d", username, i)
-		config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", testUsername).Scan(&count)
+		config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE username = ?", testUsername).Scan(&count)
 		if count == 0 {
 			return testUsername
 		}

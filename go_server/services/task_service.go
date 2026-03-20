@@ -15,11 +15,11 @@ func NewTaskService() *TaskService {
 	return &TaskService{}
 }
 
-func (s *TaskService) CreateTask(userID int64, taskType string, sku string, keywords string, sellingPoints string, competitorLink string) (*models.Task, error) {
-	query := `INSERT INTO tasks (user_id, task_type, sku, keywords, selling_points, competitor_link, status) 
-              VALUES (?, ?, ?, ?, ?, ?, 'pending')`
+func (s *TaskService) CreateTask(userID int64, sku string, keywords string, sellingPoints string, competitorLink string) (*models.Task, error) {
+	query := `INSERT INTO tasks_tab (user_id, sku, keywords, selling_points, competitor_link, status) 
+              VALUES (?, ?, ?, ?, ?, ?)`
 
-	result, err := config.DB.Exec(query, userID, taskType, sku, keywords, sellingPoints, competitorLink)
+	result, err := config.DB.Exec(query, userID, sku, keywords, sellingPoints, competitorLink, models.TaskStatusAnalyzing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}
@@ -28,18 +28,17 @@ func (s *TaskService) CreateTask(userID int64, taskType string, sku string, keyw
 	task := &models.Task{
 		ID:             taskID,
 		UserID:         userID,
-		TaskType:       taskType,
 		SKU:            sku,
 		Keywords:       keywords,
 		SellingPoints:  sellingPoints,
 		CompetitorLink: competitorLink,
-		Status:         "pending",
+		Status:         models.TaskStatusAnalyzing,
 	}
 
 	return task, nil
 }
 
-func (s *TaskService) UpdateTaskStatus(taskID int64, status string, resultData interface{}, errorMessage string) error {
+func (s *TaskService) UpdateTaskStatus(taskID int64, status int, resultData interface{}, errorMessage string) error {
 	var resultJSON string
 	if resultData != nil {
 		data, err := json.Marshal(resultData)
@@ -49,7 +48,7 @@ func (s *TaskService) UpdateTaskStatus(taskID int64, status string, resultData i
 		resultJSON = string(data)
 	}
 
-	query := `UPDATE tasks SET status = ?, result_data = ?, error_message = ? WHERE id = ?`
+	query := `UPDATE tasks_tab SET status = ?, result_data = ?, error_message = ? WHERE id = ?`
 	_, err := config.DB.Exec(query, status, resultJSON, errorMessage, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
@@ -59,15 +58,15 @@ func (s *TaskService) UpdateTaskStatus(taskID int64, status string, resultData i
 }
 
 func (s *TaskService) GetTaskByID(taskID int64) (*models.Task, error) {
-	query := `SELECT t.id, t.user_id, t.task_type, t.sku, t.keywords, t.selling_points, t.competitor_link, 
+	query := `SELECT t.id, t.user_id, t.sku, t.keywords, t.selling_points, t.competitor_link, 
               t.status, t.result_data, t.error_message, t.created_at, t.updated_at, u.username
-              FROM tasks t
-              LEFT JOIN users u ON t.user_id = u.id
+              FROM tasks_tab t
+              LEFT JOIN users_tab u ON t.user_id = u.id
               WHERE t.id = ?`
 
 	task := &models.Task{}
 	err := config.DB.QueryRow(query, taskID).Scan(
-		&task.ID, &task.UserID, &task.TaskType, &task.SKU, &task.Keywords,
+		&task.ID, &task.UserID, &task.SKU, &task.Keywords,
 		&task.SellingPoints, &task.CompetitorLink, &task.Status, &task.ResultData,
 		&task.ErrorMessage, &task.CreatedAt, &task.UpdatedAt, &task.Username,
 	)
@@ -82,16 +81,16 @@ func (s *TaskService) GetTaskByID(taskID int64) (*models.Task, error) {
 	return task, nil
 }
 
-func (s *TaskService) GetUserTasks(userID int64, taskType string, limit int, offset int) ([]models.Task, int, error) {
+func (s *TaskService) GetUserTasks(userID int64, statusFilter int, limit int, offset int) ([]models.Task, int, error) {
 	var tasks []models.Task
 	var total int
 
-	countQuery := `SELECT COUNT(*) FROM tasks WHERE user_id = ?`
+	countQuery := `SELECT COUNT(*) FROM tasks_tab WHERE user_id = ?`
 	args := []interface{}{userID}
 
-	if taskType != "" {
-		countQuery += ` AND task_type = ?`
-		args = append(args, taskType)
+	if statusFilter >= 0 {
+		countQuery += ` AND status = ?`
+		args = append(args, statusFilter)
 	}
 
 	err := config.DB.QueryRow(countQuery, args...).Scan(&total)
@@ -99,14 +98,14 @@ func (s *TaskService) GetUserTasks(userID int64, taskType string, limit int, off
 		return nil, 0, fmt.Errorf("failed to count tasks: %w", err)
 	}
 
-	query := `SELECT t.id, t.user_id, t.task_type, t.sku, t.keywords, t.selling_points, t.competitor_link, 
+	query := `SELECT t.id, t.user_id, t.sku, t.keywords, t.selling_points, t.competitor_link, 
               t.status, t.result_data, t.error_message, t.created_at, t.updated_at, u.username
-              FROM tasks t
-              LEFT JOIN users u ON t.user_id = u.id
+              FROM tasks_tab t
+              LEFT JOIN users_tab u ON t.user_id = u.id
               WHERE t.user_id = ?`
 
-	if taskType != "" {
-		query += ` AND t.task_type = ?`
+	if statusFilter >= 0 {
+		query += ` AND t.status = ?`
 	}
 
 	query += ` ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
@@ -121,7 +120,7 @@ func (s *TaskService) GetUserTasks(userID int64, taskType string, limit int, off
 	for rows.Next() {
 		var task models.Task
 		err := rows.Scan(
-			&task.ID, &task.UserID, &task.TaskType, &task.SKU, &task.Keywords,
+			&task.ID, &task.UserID, &task.SKU, &task.Keywords,
 			&task.SellingPoints, &task.CompetitorLink, &task.Status, &task.ResultData,
 			&task.ErrorMessage, &task.CreatedAt, &task.UpdatedAt, &task.Username,
 		)
@@ -138,16 +137,16 @@ func (s *TaskService) GetAllTasks(limit int, offset int) ([]models.Task, int, er
 	var tasks []models.Task
 	var total int
 
-	countQuery := `SELECT COUNT(*) FROM tasks`
+	countQuery := `SELECT COUNT(*) FROM tasks_tab`
 	err := config.DB.QueryRow(countQuery).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count tasks: %w", err)
 	}
 
-	query := `SELECT t.id, t.user_id, t.task_type, t.sku, t.keywords, t.selling_points, t.competitor_link, 
+	query := `SELECT t.id, t.user_id, t.sku, t.keywords, t.selling_points, t.competitor_link, 
               t.status, t.result_data, t.error_message, t.created_at, t.updated_at, u.username
-              FROM tasks t
-              LEFT JOIN users u ON t.user_id = u.id
+              FROM tasks_tab t
+              LEFT JOIN users_tab u ON t.user_id = u.id
               ORDER BY t.created_at DESC LIMIT ? OFFSET ?`
 
 	rows, err := config.DB.Query(query, limit, offset)
@@ -159,7 +158,7 @@ func (s *TaskService) GetAllTasks(limit int, offset int) ([]models.Task, int, er
 	for rows.Next() {
 		var task models.Task
 		err := rows.Scan(
-			&task.ID, &task.UserID, &task.TaskType, &task.SKU, &task.Keywords,
+			&task.ID, &task.UserID, &task.SKU, &task.Keywords,
 			&task.SellingPoints, &task.CompetitorLink, &task.Status, &task.ResultData,
 			&task.ErrorMessage, &task.CreatedAt, &task.UpdatedAt, &task.Username,
 		)
@@ -170,4 +169,23 @@ func (s *TaskService) GetAllTasks(limit int, offset int) ([]models.Task, int, er
 	}
 
 	return tasks, total, nil
+}
+
+func (s *TaskService) GetTaskStatusText(status int) string {
+	switch status {
+	case models.TaskStatusAnalyzing:
+		return "分析中"
+	case models.TaskStatusAnalyzed:
+		return "分析完成"
+	case models.TaskStatusGenerating:
+		return "生成图片中"
+	case models.TaskStatusCompleted:
+		return "已完成"
+	case models.TaskStatusAnalyzeFailed:
+		return "分析失败"
+	case models.TaskStatusGenerateFailed:
+		return "生成失败"
+	default:
+		return "未知状态"
+	}
 }

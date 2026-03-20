@@ -197,23 +197,23 @@ func (h *TaskHandler) AnalyzeWithTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.taskService.CreateTask(userID, "analyze", req.SKU, req.Keywords, req.SellingPoints, req.CompetitorLink)
+	task, err := h.taskService.CreateTask(userID, req.SKU, req.Keywords, req.SellingPoints, req.CompetitorLink)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, "processing", nil, "")
+	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzing, nil, "")
 
 	ctx := context.Background()
 	sellingPoints, err := h.aiService.AnalyzeSellingPoints(ctx, req)
 	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzeFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, "completed", sellingPoints, "")
+	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzed, sellingPoints, "")
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    sellingPoints,
@@ -239,17 +239,17 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	task, err := h.taskService.CreateTask(userID, "generate_image", "", "", req.Prompt, "")
+	task, err := h.taskService.CreateTask(userID, "", "", req.Prompt, "")
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, "processing", nil, "")
+	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerating, nil, "")
 
 	productImageURLs, err := h.taskHistoryService.SaveProductImagesToCDN(userID, req.ProductImages, h.cdnService)
 	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -258,7 +258,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 	if req.StyleRefImage != "" {
 		cdnImage, err := h.cdnService.UploadImage(userID, req.StyleRefImage, "style_ref")
 		if err != nil {
-			h.taskService.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
 			utils.RespondError(w, err, http.StatusInternalServerError)
 			return
 		}
@@ -268,14 +268,14 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 	ctx := context.Background()
 	generatedDataURL, err := h.aiService.GenerateImage(ctx, req)
 	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
 	generatedCDNURL, err := h.taskHistoryService.SaveGeneratedImageToCDN(userID, generatedDataURL, h.cdnService)
 	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -288,16 +288,16 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		ProductImagesURLs: h.taskHistoryService.ConvertURLsToJSON(productImageURLs),
 		StyleRefImageURL:  styleRefURL,
 		GeneratedImageURL: generatedCDNURL,
-		Status:            "completed",
+		Status:            models.TaskHistoryStatusSuccess,
 	}
 
 	if err := h.taskHistoryService.CreateHistory(history); err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, "failed", nil, err.Error())
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, "completed", map[string]interface{}{
+	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, map[string]interface{}{
 		"generated_image_url": generatedCDNURL,
 	}, "")
 
@@ -316,10 +316,11 @@ func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
-	taskType := r.URL.Query().Get("type")
+	statusStr := r.URL.Query().Get("status")
 
 	limit := 20
 	offset := 0
+	statusFilter := -1
 
 	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
@@ -331,8 +332,13 @@ func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 			offset = o
 		}
 	}
+	if statusStr != "" {
+		if s, err := strconv.Atoi(statusStr); err == nil {
+			statusFilter = s
+		}
+	}
 
-	tasks, total, err := h.taskService.GetUserTasks(userID, taskType, limit, offset)
+	tasks, total, err := h.taskService.GetUserTasks(userID, statusFilter, limit, offset)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
