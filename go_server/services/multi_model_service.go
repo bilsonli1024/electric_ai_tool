@@ -275,7 +275,7 @@ func callOpenAIChat(apiKey, prompt string) (string, error) {
 		apiBase = "https://api.openai.com/v1"
 	}
 
-	return callOpenAICompatibleChat(apiBase, apiKey, prompt)
+	return callOpenAICompatibleChat(apiBase, apiKey, prompt, "gpt-4")
 }
 
 func callOpenAICompatibleChat(apiBase, apiKey, prompt string, modelName string) (string, error) {
