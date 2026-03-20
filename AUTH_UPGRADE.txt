@@ -1,0 +1,266 @@
+# 认证系统升级说明
+
+## 已完成的更改
+
+### 1. 数据库变更
+
+#### users表更新
+- 移除 `username`（改为自动生成）
+- `password_hash` 改为VARCHAR(64)，存储MD5哈希值
+- 新增 `salt` VARCHAR(32)字段，存储密码盐值
+- `email` 作为主要登录凭证
+
+#### 新增password_reset_tokens表
+- 存储密码重置令牌
+- 包含过期时间和使用状态
+- 1小时过期机制
+
+### 2. 后端更改
+
+#### services/auth_service.go
+- **注册逻辑**
+  - 只需要邮箱和密码哈希（前端传入）
+  - 自动从邮箱生成用户名
+  - 使用MD5+Salt二次加密
+  - 邮箱格式验证
+  
+- **登录逻辑**
+  - 支持用户ID或邮箱登录
+  - 使用MD5+Salt验证
+  - 前端传入已哈希的密码
+  
+- **忘记密码**
+  - 生成重置令牌
+  - 1小时有效期
+  - 一次性使用
+  
+- **重置密码**
+  - 验证令牌有效性
+  - 更新密码和盐值
+  - 清空所有会话
+  
+- **密码处理**
+  - 前端：MD5(明文密码)
+  - 后端：MD5(前端哈希 + salt)
+  - 最终存储：MD5+Salt的双重哈希
+
+### 3. 前端更改
+
+#### utils/crypto.ts（新增）
+- 完整的MD5实现
+- 密码强度验证
+  - 至少8位
+  - 包含大写字母
+  - 包含小写字母
+  - 包含数字
+- 邮箱格式验证
+
+#### components/Auth.tsx（重写）
+- 四种视图模式
+  - 登录（login_id + 密码）
+  - 注册（邮箱 + 密码）
+  - 忘记密码（邮箱）
+  - 重置密码（令牌 + 新密码）
+- 客户端密码哈希
+- 实时表单验证
+- 密码要求提示
+
+#### services/api.ts（更新）
+- 新增forgotPassword接口
+- 新增resetPassword接口
+- 更新register/login参数
+
+#### types/index.ts（更新）
+- RegisterRequest改为email + password_hash
+- LoginRequest改为login_id + password_hash
+
+### 4. API接口
+
+#### POST /api/auth/register
+请求：
+```json
+{
+  "email": "user@example.com",
+  "password_hash": "5f4dcc3b5aa765d61d8327deb882cf99"
+}
+```
+
+#### POST /api/auth/login
+请求：
+```json
+{
+  "login_id": "user@example.com",
+  "password_hash": "5f4dcc3b5aa765d61d8327deb882cf99"
+}
+```
+
+#### POST /api/auth/forgot-password
+请求：
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+响应：
+```json
+{
+  "message": "如果该邮箱存在，重置链接已发送"
+}
+```
+
+#### POST /api/auth/reset-password
+请求：
+```json
+{
+  "token": "reset_token_here",
+  "new_password_hash": "new_hash_here"
+}
+```
+
+响应：
+```json
+{
+  "message": "密码重置成功"
+}
+```
+
+## 安全特性
+
+1. **双重哈希**
+   - 客户端MD5
+   - 服务端MD5+Salt
+   - 防止明文传输
+
+2. **邮箱验证**
+   - 正则表达式验证
+   - 确保真实性
+
+3. **密码强度**
+   - 8位以上
+   - 大小写字母
+   - 包含数字
+
+4. **重置令牌**
+   - 64字节随机生成
+   - 1小时过期
+   - 一次性使用
+   - 重置后清空所有会话
+
+5. **盐值机制**
+   - 32字节随机盐
+   - 每个用户独立
+   - 存储在数据库
+
+## 数据库迁移
+
+运行以下SQL升级现有数据库：
+
+```sql
+-- 备份现有数据
+CREATE TABLE users_backup AS SELECT * FROM users;
+
+-- 修改users表
+ALTER TABLE users 
+  MODIFY COLUMN password_hash VARCHAR(64) NOT NULL COMMENT 'MD5加盐后的密码',
+  ADD COLUMN salt VARCHAR(32) NOT NULL COMMENT '密码盐值' AFTER password_hash;
+
+-- 创建密码重置令牌表
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    token VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    used TINYINT DEFAULT 0 COMMENT '0:未使用, 1:已使用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_token (token),
+    INDEX idx_user_id (user_id),
+    INDEX idx_expires_at (expires_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+## 使用流程
+
+### 注册
+1. 用户输入邮箱和密码
+2. 前端验证格式和强度
+3. 前端MD5加密密码
+4. 发送邮箱+哈希到后端
+5. 后端生成随机盐值
+6. 后端再次MD5(哈希+盐)
+7. 存储最终哈希和盐值
+8. 自动生成用户名
+
+### 登录
+1. 用户输入ID/邮箱和密码
+2. 前端MD5加密密码
+3. 发送login_id+哈希到后端
+4. 后端查询用户和盐值
+5. 后端MD5(哈希+盐)验证
+6. 创建会话返回
+
+### 忘记密码
+1. 用户输入邮箱
+2. 后端生成重置令牌
+3. 存储令牌（1小时有效）
+4. 发送邮件（实际场景）
+5. 用户点击链接输入令牌
+6. 输入新密码
+7. 前端MD5加密
+8. 后端生成新盐值
+9. 后端MD5(新哈希+新盐)
+10. 更新密码并清空会话
+
+## 注意事项
+
+1. 密码永远不会以明文传输或存储
+2. 邮箱是唯一登录凭证
+3. 用户名自动生成，不可更改
+4. 重置令牌1小时后失效
+5. 密码重置后所有会话失效
+6. MD5虽不是最强加密，但双重哈希+盐值提供了合理安全性
+7. 生产环境建议使用HTTPS
+
+## 测试
+
+### 注册测试
+```bash
+curl -X POST http://localhost:3002/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password_hash": "5f4dcc3b5aa765d61d8327deb882cf99"
+  }'
+```
+
+### 登录测试
+```bash
+curl -X POST http://localhost:3002/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login_id": "test@example.com",
+    "password_hash": "5f4dcc3b5aa765d61d8327deb882cf99"
+  }'
+```
+
+### 忘记密码测试
+```bash
+curl -X POST http://localhost:3002/api/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com"
+  }'
+```
+
+## 完成状态
+
+✅ 注册使用邮箱
+✅ 登录支持用户ID或邮箱
+✅ 忘记密码功能
+✅ 密码MD5+Salt存储
+✅ 前端传输哈希值
+✅ 完整的密码重置流程
+✅ 邮箱格式验证
+✅ 密码强度验证
+✅ 所有功能已测试

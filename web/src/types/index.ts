@@ -46,12 +46,11 @@ export interface TaskHistory {
 }
 
 export interface RegisterRequest {
-  username: string;
   email: string;
-  password: string;
+  password_hash: string;
 }
 
 export interface LoginRequest {
-  username: string;
-  password: string;
+  login_id: string;
+  password_hash: string;
 }

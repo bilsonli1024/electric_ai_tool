@@ -1,16 +1,16 @@
 package services
 
 import (
+	"crypto/md5"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"time"
 
 	"electric_ai_tool/go_server/config"
 	"electric_ai_tool/go_server/models"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthService struct{}
@@ -20,27 +20,32 @@ func NewAuthService() *AuthService {
 }
 
 func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error) {
-	if req.Username == "" || req.Email == "" || req.Password == "" {
-		return nil, fmt.Errorf("username, email and password are required")
+	if req.Email == "" || req.PasswordHash == "" {
+		return nil, fmt.Errorf("email and password are required")
+	}
+
+	if !s.isValidEmail(req.Email) {
+		return nil, fmt.Errorf("invalid email format")
 	}
 
 	var count int
-	err := config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ? OR email = ?", req.Username, req.Email).Scan(&count)
+	err := config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE email = ?", req.Email).Scan(&count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing user: %w", err)
 	}
 	if count > 0 {
-		return nil, fmt.Errorf("username or email already exists")
+		return nil, fmt.Errorf("email already exists")
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
-	}
+	salt := s.generateSalt()
+	finalHash := s.hashPasswordWithSalt(req.PasswordHash, salt)
+
+	username := s.generateUsernameFromEmail(req.Email)
+	username = s.ensureUniqueUsername(username)
 
 	result, err := config.DB.Exec(
-		"INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-		req.Username, req.Email, string(passwordHash),
+		"INSERT INTO users (username, email, password_hash, salt) VALUES (?, ?, ?, ?)",
+		username, req.Email, finalHash, salt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -49,7 +54,7 @@ func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error)
 	userID, _ := result.LastInsertId()
 	user := &models.User{
 		ID:       userID,
-		Username: req.Username,
+		Username: username,
 		Email:    req.Email,
 		Status:   1,
 	}
@@ -58,18 +63,26 @@ func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error)
 }
 
 func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, error) {
-	if req.Username == "" || req.Password == "" {
-		return nil, "", fmt.Errorf("username and password are required")
+	if req.LoginID == "" || req.PasswordHash == "" {
+		return nil, "", fmt.Errorf("login ID and password are required")
 	}
 
 	var user models.User
-	err := config.DB.QueryRow(
-		"SELECT id, username, email, password_hash, created_at, updated_at, last_login_at, status FROM users WHERE username = ?",
-		req.Username,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt, &user.Status)
+	var query string
+	
+	if s.isValidEmail(req.LoginID) {
+		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, last_login_at, status FROM users WHERE email = ?"
+	} else {
+		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, last_login_at, status FROM users WHERE username = ?"
+	}
+
+	err := config.DB.QueryRow(query, req.LoginID).Scan(
+		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Salt,
+		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt, &user.Status,
+	)
 
 	if err == sql.ErrNoRows {
-		return nil, "", fmt.Errorf("invalid username or password")
+		return nil, "", fmt.Errorf("invalid credentials")
 	}
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query user: %w", err)
@@ -79,9 +92,9 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, erro
 		return nil, "", fmt.Errorf("user is inactive")
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
-	if err != nil {
-		return nil, "", fmt.Errorf("invalid username or password")
+	expectedHash := s.hashPasswordWithSalt(req.PasswordHash, user.Salt)
+	if expectedHash != user.PasswordHash {
+		return nil, "", fmt.Errorf("invalid credentials")
 	}
 
 	sessionID, err := s.CreateSession(user.ID)
@@ -92,6 +105,101 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, erro
 	config.DB.Exec("UPDATE users SET last_login_at = ? WHERE id = ?", time.Now(), user.ID)
 
 	return &user, sessionID, nil
+}
+
+func (s *AuthService) ForgotPassword(req models.ForgotPasswordRequest) error {
+	if req.Email == "" {
+		return fmt.Errorf("email is required")
+	}
+
+	if !s.isValidEmail(req.Email) {
+		return fmt.Errorf("invalid email format")
+	}
+
+	var userID int64
+	err := config.DB.QueryRow("SELECT id FROM users WHERE email = ?", req.Email).Scan(&userID)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to query user: %w", err)
+	}
+
+	token := s.generateResetToken()
+	expiresAt := time.Now().Add(1 * time.Hour)
+
+	_, err = config.DB.Exec(
+		"INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+		userID, token, expiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create reset token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) ResetPassword(req models.ResetPasswordRequest) error {
+	if req.Token == "" || req.NewPasswordHash == "" {
+		return fmt.Errorf("token and new password are required")
+	}
+
+	var tokenRecord models.PasswordResetToken
+	err := config.DB.QueryRow(
+		"SELECT id, user_id, token, expires_at, used FROM password_reset_tokens WHERE token = ?",
+		req.Token,
+	).Scan(&tokenRecord.ID, &tokenRecord.UserID, &tokenRecord.Token, &tokenRecord.ExpiresAt, &tokenRecord.Used)
+
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("invalid or expired token")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to query token: %w", err)
+	}
+
+	if tokenRecord.Used {
+		return fmt.Errorf("token has already been used")
+	}
+
+	if tokenRecord.ExpiresAt.Before(time.Now()) {
+		return fmt.Errorf("token has expired")
+	}
+
+	salt := s.generateSalt()
+	finalHash := s.hashPasswordWithSalt(req.NewPasswordHash, salt)
+
+	tx, err := config.DB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		"UPDATE users SET password_hash = ?, salt = ? WHERE id = ?",
+		finalHash, salt, tokenRecord.UserID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	_, err = tx.Exec(
+		"UPDATE password_reset_tokens SET used = 1 WHERE id = ?",
+		tokenRecord.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to mark token as used: %w", err)
+	}
+
+	_, err = tx.Exec("DELETE FROM sessions WHERE user_id = ?", tokenRecord.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to invalidate sessions: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 func (s *AuthService) CreateSession(userID int64) (string, error) {
@@ -153,8 +261,60 @@ func (s *AuthService) Logout(sessionID string) error {
 	return nil
 }
 
+func (s *AuthService) hashPasswordWithSalt(passwordHash string, salt string) string {
+	combined := passwordHash + salt
+	hash := md5.Sum([]byte(combined))
+	return hex.EncodeToString(hash[:])
+}
+
+func (s *AuthService) generateSalt() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 func (s *AuthService) generateSessionID() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func (s *AuthService) generateResetToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func (s *AuthService) isValidEmail(email string) bool {
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
+}
+
+func (s *AuthService) generateUsernameFromEmail(email string) string {
+	parts := regexp.MustCompile(`[@.]`).Split(email, -1)
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return "user"
+}
+
+func (s *AuthService) ensureUniqueUsername(username string) string {
+	var count int
+	config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", username).Scan(&count)
+	
+	if count == 0 {
+		return username
+	}
+
+	for i := 1; i < 10000; i++ {
+		testUsername := fmt.Sprintf("%s%d", username, i)
+		config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", testUsername).Scan(&count)
+		if count == 0 {
+			return testUsername
+		}
+	}
+
+	b := make([]byte, 4)
+	rand.Read(b)
+	return fmt.Sprintf("%s_%s", username, hex.EncodeToString(b))
 }

@@ -65,6 +65,8 @@ func main() {
 	http.HandleFunc("/api/auth/login", middleware.CORS(authHandler.Login))
 	http.HandleFunc("/api/auth/logout", middleware.CORS(authMiddleware.RequireAuth(authHandler.Logout)))
 	http.HandleFunc("/api/auth/me", middleware.CORS(authMiddleware.RequireAuth(authHandler.Me)))
+	http.HandleFunc("/api/auth/forgot-password", middleware.CORS(authHandler.ForgotPassword))
+	http.HandleFunc("/api/auth/reset-password", middleware.CORS(authHandler.ResetPassword))
 
 	http.HandleFunc("/api/analyze", middleware.CORS(handler.Analyze))
 	http.HandleFunc("/api/generate-image", middleware.CORS(handler.GenerateImage))

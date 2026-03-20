@@ -68,6 +68,50 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	utils.RespondJSON(w, models.AuthResponse{User: *user, SessionID: sessionID})
 }
 
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req models.ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	err := h.authService.ForgotPassword(req)
+	if err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	utils.RespondJSON(w, map[string]string{
+		"message": "如果该邮箱存在，重置链接已发送",
+	})
+}
+
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req models.ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	err := h.authService.ResetPassword(req)
+	if err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	utils.RespondJSON(w, map[string]string{"message": "密码重置成功"})
+}
+
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
