@@ -8,6 +8,10 @@ export const ImageGenerationPage: React.FC = () => {
   const [sellingPoints, setSellingPoints] = useState('');
   const [competitorLink, setCompetitorLink] = useState('');
   const [selectedCopywritingTaskId, setSelectedCopywritingTaskId] = useState<number | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gemini');
 
   const handleCopywritingSelect = (task: any) => {
     try {
@@ -27,6 +31,53 @@ export const ImageGenerationPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to parse copywriting task:', error);
     }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    processFiles(files);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    processFiles(files);
+  };
+
+  const processFiles = (files: File[]) => {
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    if (imageFiles.length === 0) {
+      alert('请上传图片文件');
+      return;
+    }
+
+    setUploadedImages(prev => [...prev, ...imageFiles]);
+
+    // 生成预览
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -102,10 +153,65 @@ export const ImageGenerationPage: React.FC = () => {
               />
             </div>
 
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">选择AI模型</label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('gemini')}
+                  className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                    selectedModel === 'gemini'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 hover:border-purple-300'
+                  }`}
+                >
+                  Google Gemini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('gpt')}
+                  className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                    selectedModel === 'gpt'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 hover:border-purple-300'
+                  }`}
+                >
+                  OpenAI GPT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('deepseek')}
+                  className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                    selectedModel === 'deepseek'
+                      ? 'border-purple-500 bg-purple-50 text-purple-700'
+                      : 'border-gray-200 hover:border-purple-300'
+                  }`}
+                >
+                  DeepSeek
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-4">
               <label className="text-sm font-semibold">产品白底图 (可多选)</label>
+              <input
+                type="file"
+                id="image-upload"
+                multiple
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
               <div 
-                className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-purple-500 hover:bg-purple-50/50 transition-all cursor-pointer group"
+                className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer group ${
+                  isDragging 
+                    ? 'border-purple-500 bg-purple-50' 
+                    : 'border-gray-200 hover:border-purple-500 hover:bg-purple-50/50'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById('image-upload')?.click()}
               >
                 <div className="space-y-4">
                   <div className="w-16 h-16 bg-purple-50 rounded-full flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
@@ -117,6 +223,33 @@ export const ImageGenerationPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Image Previews */}
+              {imagePreviews.length > 0 && (
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  {imagePreviews.map((preview, index) => (
+                    <div key={index} className="relative group">
+                      <img 
+                        src={preview} 
+                        alt={`Preview ${index + 1}`}
+                        className="w-full h-32 object-cover rounded-lg border-2 border-gray-200"
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeImage(index);
+                        }}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                      <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                        {uploadedImages[index].name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <button 

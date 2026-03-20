@@ -46,6 +46,7 @@ export const CopywritingGenerator: React.FC = () => {
   const [step, setStep] = useState<Step>('competitors');
   const [competitorUrls, setCompetitorUrls] = useState<string[]>(['']);
   const [taskName, setTaskName] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState('gemini');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CompetitorAnalysis | null>(null);
   const [taskId, setTaskId] = useState<number | null>(null);
@@ -87,7 +88,7 @@ export const CopywritingGenerator: React.FC = () => {
 
     setIsAnalyzing(true);
     try {
-      const response = await apiClient.analyzeCompetitors(validUrls, 'gemini', taskName || undefined);
+      const response = await apiClient.analyzeCompetitors(validUrls, selectedModel, taskName || undefined);
       setAnalysis(response.data);
       setTaskId(response.task_id);
       setSelectedKeywords(response.data.keywords.map((k: Keyword) => k.original));
@@ -136,6 +137,7 @@ export const CopywritingGenerator: React.FC = () => {
         selectedReviewInsights,
         selectedImageInsights,
         productDetails,
+        model: selectedModel,
       });
       setResult(response.data);
       setStep('result');
@@ -213,6 +215,45 @@ ${result.searchTerms}
                 onChange={(e) => setTaskName(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
               />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">选择AI模型</label>
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('gemini')}
+                  className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                    selectedModel === 'gemini'
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  Google Gemini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('gpt')}
+                  className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                    selectedModel === 'gpt'
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  OpenAI GPT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('deepseek')}
+                  className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                    selectedModel === 'deepseek'
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-gray-200 hover:border-orange-300'
+                  }`}
+                >
+                  DeepSeek
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
