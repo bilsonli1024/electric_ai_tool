@@ -105,7 +105,7 @@ SKU: %s
 		ResponseSchema:   schema,
 	}
 
-	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-2.0-flash-exp", contents, config)
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-1.5-flash", contents, config)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ SKU: %s
 返回JSON格式：{"sellingPoints": [{"title":"...","description":"...","title_cn":"...","description_cn":"..."}]}
 `, req.SKU, req.Keywords, req.SellingPoints, competitorInfo)
 
-	result, err := callOpenAICompatibleChat(apiBase, apiKey, prompt)
+	result, err := callOpenAICompatibleChat(apiBase, apiKey, prompt, "deepseek-chat")
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +248,7 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 		ResponseModalities: []string{"IMAGE", "TEXT"},
 	}
 
-	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-2.0-flash-exp", contents, config)
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-1.5-flash", contents, config)
 	if err != nil {
 		return "", err
 	}
@@ -278,11 +278,15 @@ func callOpenAIChat(apiKey, prompt string) (string, error) {
 	return callOpenAICompatibleChat(apiBase, apiKey, prompt)
 }
 
-func callOpenAICompatibleChat(apiBase, apiKey, prompt string) (string, error) {
+func callOpenAICompatibleChat(apiBase, apiKey, prompt string, modelName string) (string, error) {
 	url := strings.TrimSuffix(apiBase, "/") + "/chat/completions"
 
+	if modelName == "" {
+		modelName = "gpt-4"
+	}
+
 	payload := map[string]interface{}{
-		"model": "gpt-4",
+		"model": modelName,
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
 		},

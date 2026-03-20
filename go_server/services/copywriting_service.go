@@ -112,7 +112,7 @@ Return JSON with this structure:
 		ResponseSchema:   schema,
 	}
 
-	resp, err := s.multiModelService.geminiClient.Models.GenerateContent(ctx, "gemini-2.0-flash-exp", contents, config)
+	resp, err := s.multiModelService.geminiClient.Models.GenerateContent(ctx, "gemini-1.5-flash", contents, config)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ Return JSON:
 		ResponseSchema:   schema,
 	}
 
-	resp, err := s.multiModelService.geminiClient.Models.GenerateContent(ctx, "gemini-2.0-flash-exp", contents, config)
+	resp, err := s.multiModelService.geminiClient.Models.GenerateContent(ctx, "gemini-1.5-flash", contents, config)
 	if err != nil {
 		return nil, err
 	}
