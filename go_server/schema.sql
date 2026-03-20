@@ -53,9 +53,7 @@ CREATE TABLE IF NOT EXISTS role_permissions_tab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_role_permission (role_id, permission_id),
     INDEX idx_role_id (role_id),
-    INDEX idx_permission_id (permission_id),
-    FOREIGN KEY (role_id) REFERENCES roles_tab(id) ON DELETE CASCADE,
-    FOREIGN KEY (permission_id) REFERENCES permissions_tab(id) ON DELETE CASCADE
+    INDEX idx_permission_id (permission_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='角色权限关联表';
 
 -- 用户角色关联表
@@ -66,9 +64,7 @@ CREATE TABLE IF NOT EXISTS user_roles_tab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_user_role (user_id, role_id),
     INDEX idx_user_id (user_id),
-    INDEX idx_role_id (role_id),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE,
-    FOREIGN KEY (role_id) REFERENCES roles_tab(id) ON DELETE CASCADE
+    INDEX idx_role_id (role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户角色关联表';
 
 -- 用户登录日志表
@@ -82,8 +78,7 @@ CREATE TABLE IF NOT EXISTS user_login_log_tab (
     login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
     INDEX idx_login_time (login_time),
-    INDEX idx_session_id (session_id),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+    INDEX idx_session_id (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户登录日志表';
 
 -- 密码重置令牌表
@@ -96,8 +91,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens_tab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_token (token),
     INDEX idx_user_id (user_id),
-    INDEX idx_expires_at (expires_at),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+    INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='密码重置令牌表';
 
 -- 会话表
@@ -108,8 +102,7 @@ CREATE TABLE IF NOT EXISTS sessions_tab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
-    INDEX idx_expires_at (expires_at),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+    INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户会话表';
 
 -- 任务表（图片生成任务）
@@ -131,9 +124,7 @@ CREATE TABLE IF NOT EXISTS tasks_tab (
     INDEX idx_user_id (user_id),
     INDEX idx_status (status),
     INDEX idx_created_at (created_at),
-    INDEX idx_copywriting_task_id (copywriting_task_id),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE,
-    FOREIGN KEY (copywriting_task_id) REFERENCES copywriting_tasks_tab(id) ON DELETE SET NULL
+    INDEX idx_copywriting_task_id (copywriting_task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图片生成任务表';
 
 -- 任务历史表
@@ -166,9 +157,7 @@ CREATE TABLE IF NOT EXISTS task_history_tab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_task_id (task_id),
     INDEX idx_user_id (user_id),
-    INDEX idx_created_at (created_at),
-    FOREIGN KEY (task_id) REFERENCES tasks_tab(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+    INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务历史版本表';
 
 -- CDN图片记录表
@@ -184,8 +173,7 @@ CREATE TABLE IF NOT EXISTS cdn_images_tab (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
     INDEX idx_cdn_key (cdn_key),
-    INDEX idx_image_type (image_type),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+    INDEX idx_image_type (image_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CDN图片记录表';
 
 -- 文案生成任务表
@@ -206,6 +194,5 @@ CREATE TABLE IF NOT EXISTS copywriting_tasks_tab (
     INDEX idx_user_id (user_id),
     INDEX idx_status (status),
     INDEX idx_created_at (created_at),
-    INDEX idx_task_name (task_name),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+    INDEX idx_task_name (task_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文案生成任务表';
