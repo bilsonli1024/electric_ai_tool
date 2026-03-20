@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"regexp"
 	"time"
 
@@ -57,6 +58,12 @@ func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error)
 		Username: username,
 		Email:    req.Email,
 		Status:   1,
+	}
+
+	// Assign default user role
+	rbacService := NewRBACService()
+	if userRole, err := rbacService.GetRoleByCode(models.RoleUser); err == nil {
+		rbacService.AssignRoleToUser(userID, userRole.ID)
 	}
 
 	return user, nil
@@ -140,6 +147,11 @@ func (s *AuthService) ForgotPassword(req models.ForgotPasswordRequest) error {
 	if err != nil {
 		return fmt.Errorf("failed to create reset token: %w", err)
 	}
+
+	// TODO: 在生产环境中，这里应该发送真实的邮件
+	// 目前仅记录到日志，开发时可以从日志中复制token
+	log.Printf("Password reset token for user %d: %s", userID, token)
+	log.Printf("Reset link: http://localhost:5173/?reset_token=%s", token)
 
 	return nil
 }

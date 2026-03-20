@@ -21,6 +21,16 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // 检查URL参数，如果有reset token则自动进入重置密码模式
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('reset_token');
+    if (token) {
+      setViewMode('reset');
+      setFormData(prev => ({ ...prev, resetToken: token }));
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -268,6 +278,21 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             </div>
           )}
 
+          {viewMode === 'forgot' && (
+            <div className="text-center">
+              <button
+                onClick={() => {
+                  setViewMode('reset');
+                  setError('');
+                  setSuccess('');
+                }}
+                className="text-gray-600 hover:text-gray-800 text-sm"
+              >
+                已有重置令牌？直接重置
+              </button>
+            </div>
+          )}
+
           {(viewMode === 'forgot' || viewMode === 'reset') && (
             <div className="text-center">
               <button
@@ -292,6 +317,26 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
               <li>包含大写字母</li>
               <li>包含小写字母</li>
               <li>包含数字</li>
+            </ul>
+          </div>
+        )}
+
+        {viewMode === 'forgot' && (
+          <div className="mt-4 text-xs text-gray-500 bg-blue-50 p-3 rounded border border-blue-200">
+            <p className="font-medium mb-1 text-blue-800">提示：</p>
+            <p className="text-blue-700">
+              开发环境下，重置令牌会打印在服务器日志中。生产环境将通过邮件发送。
+            </p>
+          </div>
+        )}
+
+        {viewMode === 'reset' && (
+          <div className="mt-4 text-xs text-gray-500 bg-yellow-50 p-3 rounded border border-yellow-200">
+            <p className="font-medium mb-1 text-yellow-800">说明：</p>
+            <ul className="list-disc list-inside space-y-0.5 text-yellow-700">
+              <li>令牌有效期为1小时</li>
+              <li>每个令牌只能使用一次</li>
+              <li>如果没收到邮件，请检查服务器日志</li>
             </ul>
           </div>
         )}

@@ -46,6 +46,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
 
             <div className="hidden md:flex space-x-4">
               <button
+                onClick={() => onNavigate('copywriting')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  currentPage === 'copywriting'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                文案生成
+              </button>
+
+              <button
                 onClick={() => onNavigate('generator')}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   currentPage === 'generator'

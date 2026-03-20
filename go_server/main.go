@@ -53,11 +53,19 @@ func main() {
 	taskService := services.NewTaskService()
 	taskHistoryService := services.NewTaskHistoryService()
 	cdnService := services.NewCDNService()
+	copywritingService := services.NewCopywritingService(multiModelService)
+	rbacService := services.NewRBACService()
+
+	// Initialize RBAC
+	if err := rbacService.InitializeDefaultRolesAndPermissions(); err != nil {
+		log.Printf("⚠️  Failed to initialize RBAC: %v", err)
+	}
 
 	handler := handlers.NewHandler(aiService)
 	authHandler := handlers.NewAuthHandler(authService)
 	taskHandler := handlers.NewTaskHandler(multiModelService, taskService, taskHistoryService, cdnService, authService)
 	modelTestHandler := handlers.NewModelTestHandler(multiModelService)
+	copywritingHandler := handlers.NewCopywritingHandler(copywritingService, authService)
 
 	authMiddleware := middleware.NewAuthMiddleware(authService)
 
@@ -83,6 +91,12 @@ func main() {
 
 	http.HandleFunc("/api/models/test", middleware.CORS(authMiddleware.RequireAuth(modelTestHandler.TestModel)))
 	http.HandleFunc("/api/models/test-all", middleware.CORS(authMiddleware.RequireAuth(modelTestHandler.TestAllModels)))
+
+	http.HandleFunc("/api/copywriting/analyze", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.AnalyzeCompetitors)))
+	http.HandleFunc("/api/copywriting/generate", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GenerateCopy)))
+	http.HandleFunc("/api/copywriting/tasks", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GetTasks)))
+	http.HandleFunc("/api/copywriting/task", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GetTask)))
+	http.HandleFunc("/api/copywriting/search", middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.SearchTasks)))
 
 	distPath := filepath.Join(execDir, "../web/dist")
 	if _, err := os.Stat(distPath); err == nil {

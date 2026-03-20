@@ -4,14 +4,16 @@ import { Navbar } from './components/Navbar';
 import { TaskCenter } from './components/TaskCenter';
 import { UserManagement } from './components/UserManagement';
 import { ModelTest } from './components/ModelTest';
+import { CopywritingGenerator } from './components/CopywritingGenerator';
+import { ImageGenerationPage } from './components/ImageGenerationPage';
 import { apiClient } from './services/api';
 
-type Page = 'generator' | 'tasks' | 'user' | 'modeltest';
+type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest';
 
 export const MainApp: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<Page>('generator');
+  const [currentPage, setCurrentPage] = useState<Page>('copywriting');
 
   useEffect(() => {
     checkAuth();
@@ -55,11 +57,8 @@ export const MainApp: React.FC = () => {
       <Navbar currentPage={currentPage} onNavigate={setCurrentPage} />
       
       <div className="py-6">
-        {currentPage === 'generator' && (
-          <div className="max-w-7xl mx-auto px-4">
-            <div id="original-app-container"></div>
-          </div>
-        )}
+        {currentPage === 'copywriting' && <CopywritingGenerator />}
+        {currentPage === 'generator' && <ImageGenerationPage />}
         {currentPage === 'tasks' && <TaskCenter />}
         {currentPage === 'user' && <UserManagement />}
         {currentPage === 'modeltest' && <ModelTest />}

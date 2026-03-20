@@ -138,6 +138,44 @@ class ApiClient {
     });
   }
 
+  async analyzeCompetitors(urls: string[], model?: string, taskName?: string): Promise<{ data: any; task_id: number }> {
+    return this.request('/api/copywriting/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ urls, model: model || 'gemini', task_name: taskName }),
+    });
+  }
+
+  async generateCopy(data: any): Promise<{ data: any; task_id: number }> {
+    return this.request('/api/copywriting/generate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCopywritingTasks(params?: { limit?: number; offset?: number }): Promise<{ data: any[]; total: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+
+    return this.request<{ data: any[]; total: number }>(
+      `/api/copywriting/tasks?${queryParams.toString()}`
+    );
+  }
+
+  async getCopywritingTask(taskId: number): Promise<{ data: any }> {
+    return this.request(`/api/copywriting/task?task_id=${taskId}`);
+  }
+
+  async searchCopywritingTasks(keyword: string, limit?: number): Promise<{ data: any[] }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append('keyword', keyword);
+    if (limit) queryParams.append('limit', limit.toString());
+
+    return this.request<{ data: any[] }>(
+      `/api/copywriting/search?${queryParams.toString()}`
+    );
+  }
+
   isAuthenticated(): boolean {
     return this.sessionId !== null;
   }

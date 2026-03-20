@@ -13,6 +13,58 @@ CREATE TABLE IF NOT EXISTS users_tab (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户账号表';
 
+-- 角色表
+CREATE TABLE IF NOT EXISTS roles_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_name VARCHAR(64) UNIQUE NOT NULL,
+    role_code VARCHAR(64) UNIQUE NOT NULL COMMENT '角色代码',
+    description VARCHAR(256),
+    status TINYINT DEFAULT 1 COMMENT '1:启用, 0:禁用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_role_code (role_code),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='角色表';
+
+-- 权限表
+CREATE TABLE IF NOT EXISTS permissions_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    permission_name VARCHAR(128) NOT NULL,
+    permission_code VARCHAR(128) UNIQUE NOT NULL COMMENT '权限代码',
+    resource_type VARCHAR(64) COMMENT '资源类型:copywriting,image_generation,model_test',
+    action VARCHAR(32) COMMENT '操作:create,read,update,delete',
+    description VARCHAR(256),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_permission_code (permission_code),
+    INDEX idx_resource_type (resource_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='权限表';
+
+-- 角色权限关联表
+CREATE TABLE IF NOT EXISTS role_permissions_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_id BIGINT NOT NULL,
+    permission_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_role_permission (role_id, permission_id),
+    INDEX idx_role_id (role_id),
+    INDEX idx_permission_id (permission_id),
+    FOREIGN KEY (role_id) REFERENCES roles_tab(id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions_tab(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='角色权限关联表';
+
+-- 用户角色关联表
+CREATE TABLE IF NOT EXISTS user_roles_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_role (user_id, role_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_role_id (role_id),
+    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles_tab(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户角色关联表';
+
 -- 用户登录日志表
 CREATE TABLE IF NOT EXISTS user_login_log_tab (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -54,7 +106,7 @@ CREATE TABLE IF NOT EXISTS sessions_tab (
     FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户会话表';
 
--- 任务表
+-- 任务表（图片生成任务）
 CREATE TABLE IF NOT EXISTS tasks_tab (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -62,6 +114,7 @@ CREATE TABLE IF NOT EXISTS tasks_tab (
     keywords VARCHAR(512),
     selling_points TEXT,
     competitor_link VARCHAR(512),
+    copywriting_task_id BIGINT COMMENT '关联的文案生成任务ID',
     analyze_model VARCHAR(32) DEFAULT 'gemini' COMMENT '分析使用的模型',
     generate_model VARCHAR(32) DEFAULT 'gemini' COMMENT '生成使用的模型',
     status TINYINT DEFAULT 0 COMMENT '0:分析中, 1:分析完成, 2:生成图片中, 3:已完成, 10:分析失败, 11:生成失败',
@@ -72,8 +125,10 @@ CREATE TABLE IF NOT EXISTS tasks_tab (
     INDEX idx_user_id (user_id),
     INDEX idx_status (status),
     INDEX idx_created_at (created_at),
-    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='任务表';
+    INDEX idx_copywriting_task_id (copywriting_task_id),
+    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE,
+    FOREIGN KEY (copywriting_task_id) REFERENCES copywriting_tasks_tab(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图片生成任务表';
 
 -- 任务历史表
 -- 字段说明：
@@ -126,3 +181,25 @@ CREATE TABLE IF NOT EXISTS cdn_images_tab (
     INDEX idx_image_type (image_type),
     FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CDN图片记录表';
+
+-- 文案生成任务表
+CREATE TABLE IF NOT EXISTS copywriting_tasks_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    task_name VARCHAR(256) COMMENT '任务名称',
+    competitor_urls TEXT COMMENT '竞品链接JSON数组',
+    analysis_result TEXT COMMENT '竞品分析结果JSON',
+    product_details TEXT COMMENT '产品详情JSON',
+    generated_copy TEXT COMMENT '生成的文案JSON',
+    status TINYINT DEFAULT 0 COMMENT '0:分析中, 1:分析完成, 2:生成中, 3:已完成, 10:分析失败, 11:生成失败',
+    analyze_model VARCHAR(32) DEFAULT 'gemini' COMMENT '分析使用的模型',
+    generate_model VARCHAR(32) DEFAULT 'gemini' COMMENT '生成使用的模型',
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    INDEX idx_task_name (task_name),
+    FOREIGN KEY (user_id) REFERENCES users_tab(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文案生成任务表';
