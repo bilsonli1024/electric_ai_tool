@@ -48,6 +48,7 @@ export interface TaskHistory {
 export interface RegisterRequest {
   email: string;
   password_hash: string;
+  verification_code: string;
 }
 
 export interface LoginRequest {

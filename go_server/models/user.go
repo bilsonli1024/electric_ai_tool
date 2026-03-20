@@ -113,8 +113,9 @@ type CDNImage struct {
 }
 
 type RegisterRequest struct {
-	Email        string `json:"email"`
-	PasswordHash string `json:"password_hash"`
+	Email            string `json:"email"`
+	PasswordHash     string `json:"password_hash"`
+	VerificationCode string `json:"verification_code"`
 }
 
 type LoginRequest struct {

@@ -13,11 +13,15 @@ import (
 )
 
 type AuthHandler struct {
-	authService *services.AuthService
+	authService  *services.AuthService
+	emailService *services.EmailService
 }
 
-func NewAuthHandler(authService *services.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService *services.AuthService, emailService *services.EmailService) *AuthHandler {
+	return &AuthHandler{
+		authService:  authService,
+		emailService: emailService,
+	}
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +33,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if req.VerificationCode == "" {
+		utils.RespondError(w, fmt.Errorf("verification code is required"), http.StatusBadRequest)
+		return
+	}
+
+	valid, err := h.emailService.VerifyCode(req.Email, req.VerificationCode, "register")
+	if err != nil || !valid {
+		utils.RespondError(w, fmt.Errorf("invalid or expired verification code"), http.StatusBadRequest)
 		return
 	}
 
@@ -128,6 +143,41 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.RespondJSON(w, map[string]string{"message": "logged out"})
+}
+
+func (h *AuthHandler) SendVerificationCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Email   string `json:"email"`
+		Purpose string `json:"purpose"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if req.Purpose != "register" && req.Purpose != "reset" {
+		utils.RespondError(w, fmt.Errorf("invalid purpose"), http.StatusBadRequest)
+		return
+	}
+
+	code := h.emailService.GenerateCode()
+	
+	if err := h.emailService.SaveVerificationCode(req.Email, code, req.Purpose); err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.emailService.SendVerificationCode(req.Email, code, req.Purpose); err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	utils.RespondJSON(w, map[string]string{"message": "验证码已发送"})
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {

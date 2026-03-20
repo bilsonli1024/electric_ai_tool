@@ -16,10 +16,13 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
     password: '',
     confirmPassword: '',
     resetToken: '',
+    verificationCode: '',
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
 
   // 检查URL参数，如果有reset token则自动进入重置密码模式
   React.useEffect(() => {
@@ -30,6 +33,34 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
       setFormData(prev => ({ ...prev, resetToken: token }));
     }
   }, []);
+
+  // 倒计时
+  React.useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const sendVerificationCode = async () => {
+    if (!validateEmail(formData.email)) {
+      setError('请输入有效的邮箱地址');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+    try {
+      await apiClient.sendVerificationCode(formData.email, 'register');
+      setSuccess('验证码已发送到您的邮箱');
+      setCodeSent(true);
+      setCountdown(60);
+    } catch (err: any) {
+      setError(err.message || '发送验证码失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,10 +83,15 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           throw new Error('两次输入的密码不一致');
         }
 
+        if (!formData.verificationCode) {
+          throw new Error('请输入验证码');
+        }
+
         const passwordHash = await hashPassword(formData.password);
         await apiClient.register({
           email: formData.email,
           password_hash: passwordHash,
+          verification_code: formData.verificationCode,
         });
         onAuthSuccess();
       } else if (viewMode === 'login') {
@@ -158,6 +194,34 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 placeholder="请输入邮箱"
               />
+            </div>
+          )}
+
+          {viewMode === 'register' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                验证码 *
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="verificationCode"
+                  value={formData.verificationCode}
+                  onChange={handleChange}
+                  required
+                  maxLength={6}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="请输入6位验证码"
+                />
+                <button
+                  type="button"
+                  onClick={sendVerificationCode}
+                  disabled={countdown > 0 || loading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {countdown > 0 ? `${countdown}秒后重试` : '发送验证码'}
+                </button>
+              </div>
             </div>
           )}
 

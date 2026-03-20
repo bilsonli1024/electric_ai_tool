@@ -50,6 +50,7 @@ func main() {
 	aiService := services.NewAIService(client)
 	multiModelService := services.NewMultiModelService(client)
 	authService := services.NewAuthService()
+	emailService := services.NewEmailService()
 	taskService := services.NewTaskService()
 	taskHistoryService := services.NewTaskHistoryService()
 	cdnService := services.NewCDNService()
@@ -62,7 +63,7 @@ func main() {
 	}
 
 	handler := handlers.NewHandler(aiService)
-	authHandler := handlers.NewAuthHandler(authService)
+	authHandler := handlers.NewAuthHandler(authService, emailService)
 	taskHandler := handlers.NewTaskHandler(multiModelService, taskService, taskHistoryService, cdnService, authService)
 	modelTestHandler := handlers.NewModelTestHandler(multiModelService)
 	copywritingHandler := handlers.NewCopywritingHandler(copywritingService, authService)
@@ -77,6 +78,7 @@ func main() {
 	http.HandleFunc("/api/auth/me", middleware.CORS(authMiddleware.RequireAuth(authHandler.Me)))
 	http.HandleFunc("/api/auth/forgot-password", middleware.CORS(authHandler.ForgotPassword))
 	http.HandleFunc("/api/auth/reset-password", middleware.CORS(authHandler.ResetPassword))
+	http.HandleFunc("/api/auth/send-verification-code", middleware.CORS(authHandler.SendVerificationCode))
 
 	http.HandleFunc("/api/analyze", middleware.CORS(handler.Analyze))
 	http.HandleFunc("/api/generate-image", middleware.CORS(handler.GenerateImage))

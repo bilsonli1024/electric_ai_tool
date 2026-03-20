@@ -1,6 +1,6 @@
 import { User, AuthResponse, LoginRequest, RegisterRequest, Task, TaskHistory } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002';
 
 class ApiClient {
   private sessionId: string | null = null;
@@ -43,6 +43,13 @@ class ApiClient {
     this.sessionId = response.session_id;
     localStorage.setItem('session_id', response.session_id);
     return response;
+  }
+
+  async sendVerificationCode(email: string, purpose: string): Promise<{ message: string }> {
+    return this.request('/api/auth/send-verification-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, purpose }),
+    });
   }
 
   async login(data: LoginRequest): Promise<AuthResponse> {
