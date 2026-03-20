@@ -124,6 +124,20 @@ class ApiClient {
     });
   }
 
+  async testModel(model: string, prompt: string): Promise<any> {
+    return this.request('/api/models/test', {
+      method: 'POST',
+      body: JSON.stringify({ model, prompt }),
+    });
+  }
+
+  async testAllModels(prompt: string): Promise<{ results: any[] }> {
+    return this.request('/api/models/test-all', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+  }
+
   isAuthenticated(): boolean {
     return this.sessionId !== null;
   }

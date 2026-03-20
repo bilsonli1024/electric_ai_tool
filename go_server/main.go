@@ -48,6 +48,7 @@ func main() {
 	}
 
 	aiService := services.NewAIService(client)
+	multiModelService := services.NewMultiModelService(client)
 	authService := services.NewAuthService()
 	taskService := services.NewTaskService()
 	taskHistoryService := services.NewTaskHistoryService()
@@ -55,7 +56,8 @@ func main() {
 
 	handler := handlers.NewHandler(aiService)
 	authHandler := handlers.NewAuthHandler(authService)
-	taskHandler := handlers.NewTaskHandler(aiService, taskService, taskHistoryService, cdnService, authService)
+	taskHandler := handlers.NewTaskHandler(multiModelService, taskService, taskHistoryService, cdnService, authService)
+	modelTestHandler := handlers.NewModelTestHandler(multiModelService)
 
 	authMiddleware := middleware.NewAuthMiddleware(authService)
 
@@ -78,6 +80,9 @@ func main() {
 	http.HandleFunc("/api/tasks", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetTasks)))
 	http.HandleFunc("/api/tasks/all", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetAllTasks)))
 	http.HandleFunc("/api/tasks/history", middleware.CORS(authMiddleware.RequireAuth(taskHandler.GetTaskHistory)))
+
+	http.HandleFunc("/api/models/test", middleware.CORS(authMiddleware.RequireAuth(modelTestHandler.TestModel)))
+	http.HandleFunc("/api/models/test-all", middleware.CORS(authMiddleware.RequireAuth(modelTestHandler.TestAllModels)))
 
 	distPath := filepath.Join(execDir, "../web/dist")
 	if _, err := os.Stat(distPath); err == nil {

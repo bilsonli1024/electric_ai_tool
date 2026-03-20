@@ -22,12 +22,12 @@ func (s *TaskHistoryService) CreateHistory(history *models.TaskHistory) error {
 		history.Version = 1
 	}
 
-	insertQuery := `INSERT INTO task_history_tab (task_id, user_id, version, prompt, aspect_ratio, 
+	insertQuery := `INSERT INTO task_history_tab (task_id, user_id, version, model, prompt, aspect_ratio, 
                     product_images_urls, style_ref_image_url, generated_image_url, edit_instruction, status, error_message) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	result, err := config.DB.Exec(insertQuery,
-		history.TaskID, history.UserID, history.Version, history.Prompt, history.AspectRatio,
+		history.TaskID, history.UserID, history.Version, history.Model, history.Prompt, history.AspectRatio,
 		history.ProductImagesURLs, history.StyleRefImageURL, history.GeneratedImageURL,
 		history.EditInstruction, history.Status, history.ErrorMessage,
 	)
@@ -51,7 +51,7 @@ func (s *TaskHistoryService) GetTaskHistory(taskID int64, limit int, offset int)
 		return nil, 0, fmt.Errorf("failed to count history: %w", err)
 	}
 
-	query := `SELECT id, task_id, user_id, version, prompt, aspect_ratio, 
+	query := `SELECT id, task_id, user_id, version, model, prompt, aspect_ratio, 
               product_images_urls, style_ref_image_url, generated_image_url, 
               edit_instruction, status, error_message, created_at 
               FROM task_history_tab WHERE task_id = ? 
@@ -65,11 +65,11 @@ func (s *TaskHistoryService) GetTaskHistory(taskID int64, limit int, offset int)
 
 	for rows.Next() {
 		var history models.TaskHistory
-		var productImagesURLs, styleRefImageURL, generatedImageURL, editInstruction, errorMessage sql.NullString
+		var model, productImagesURLs, styleRefImageURL, generatedImageURL, editInstruction, errorMessage sql.NullString
 
 		err := rows.Scan(
 			&history.ID, &history.TaskID, &history.UserID, &history.Version,
-			&history.Prompt, &history.AspectRatio, &productImagesURLs,
+			&model, &history.Prompt, &history.AspectRatio, &productImagesURLs,
 			&styleRefImageURL, &generatedImageURL, &editInstruction,
 			&history.Status, &errorMessage, &history.CreatedAt,
 		)
@@ -77,6 +77,9 @@ func (s *TaskHistoryService) GetTaskHistory(taskID int64, limit int, offset int)
 			return nil, 0, fmt.Errorf("failed to scan history: %w", err)
 		}
 
+		if model.Valid {
+			history.Model = model.String
+		}
 		if productImagesURLs.Valid {
 			history.ProductImagesURLs = productImagesURLs.String
 		}
@@ -100,18 +103,18 @@ func (s *TaskHistoryService) GetTaskHistory(taskID int64, limit int, offset int)
 }
 
 func (s *TaskHistoryService) GetLatestHistory(taskID int64) (*models.TaskHistory, error) {
-	query := `SELECT id, task_id, user_id, version, prompt, aspect_ratio, 
+	query := `SELECT id, task_id, user_id, version, model, prompt, aspect_ratio, 
               product_images_urls, style_ref_image_url, generated_image_url, 
               edit_instruction, status, error_message, created_at 
               FROM task_history_tab WHERE task_id = ? 
               ORDER BY version DESC LIMIT 1`
 
 	history := &models.TaskHistory{}
-	var productImagesURLs, styleRefImageURL, generatedImageURL, editInstruction, errorMessage sql.NullString
+	var model, productImagesURLs, styleRefImageURL, generatedImageURL, editInstruction, errorMessage sql.NullString
 
 	err := config.DB.QueryRow(query, taskID).Scan(
 		&history.ID, &history.TaskID, &history.UserID, &history.Version,
-		&history.Prompt, &history.AspectRatio, &productImagesURLs,
+		&model, &history.Prompt, &history.AspectRatio, &productImagesURLs,
 		&styleRefImageURL, &generatedImageURL, &editInstruction,
 		&history.Status, &errorMessage, &history.CreatedAt,
 	)
@@ -123,6 +126,9 @@ func (s *TaskHistoryService) GetLatestHistory(taskID int64) (*models.TaskHistory
 		return nil, fmt.Errorf("failed to get latest history: %w", err)
 	}
 
+	if model.Valid {
+		history.Model = model.String
+	}
 	if productImagesURLs.Valid {
 		history.ProductImagesURLs = productImagesURLs.String
 	}

@@ -146,18 +146,18 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 type TaskHandler struct {
-	aiService          *services.AIService
+	multiModelService  *services.MultiModelService
 	taskService        *services.TaskService
 	taskHistoryService *services.TaskHistoryService
 	cdnService         *services.CDNService
 	authService        *services.AuthService
 }
 
-func NewTaskHandler(aiService *services.AIService, taskService *services.TaskService,
+func NewTaskHandler(multiModelService *services.MultiModelService, taskService *services.TaskService,
 	taskHistoryService *services.TaskHistoryService, cdnService *services.CDNService,
 	authService *services.AuthService) *TaskHandler {
 	return &TaskHandler{
-		aiService:          aiService,
+		multiModelService:  multiModelService,
 		taskService:        taskService,
 		taskHistoryService: taskHistoryService,
 		cdnService:         cdnService,
@@ -197,7 +197,11 @@ func (h *TaskHandler) AnalyzeWithTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.taskService.CreateTask(userID, req.SKU, req.Keywords, req.SellingPoints, req.CompetitorLink)
+	if req.Model == "" {
+		req.Model = models.ModelGemini
+	}
+
+	task, err := h.taskService.CreateTask(userID, req.SKU, req.Keywords, req.SellingPoints, req.CompetitorLink, req.Model, models.ModelGemini)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
@@ -206,7 +210,7 @@ func (h *TaskHandler) AnalyzeWithTask(w http.ResponseWriter, r *http.Request) {
 	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzing, nil, "")
 
 	ctx := context.Background()
-	sellingPoints, err := h.aiService.AnalyzeSellingPoints(ctx, req)
+	sellingPoints, err := h.multiModelService.AnalyzeSellingPoints(ctx, req)
 	if err != nil {
 		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzeFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
@@ -239,7 +243,11 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	task, err := h.taskService.CreateTask(userID, "", "", req.Prompt, "")
+	if req.Model == "" {
+		req.Model = models.ModelGemini
+	}
+
+	task, err := h.taskService.CreateTask(userID, "", "", req.Prompt, "", models.ModelGemini, req.Model)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
@@ -266,7 +274,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 	}
 
 	ctx := context.Background()
-	generatedDataURL, err := h.aiService.GenerateImage(ctx, req)
+	generatedDataURL, err := h.multiModelService.GenerateImage(ctx, req)
 	if err != nil {
 		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
@@ -283,6 +291,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 	history := &models.TaskHistory{
 		TaskID:            task.ID,
 		UserID:            userID,
+		Model:             req.Model,
 		Prompt:            req.Prompt,
 		AspectRatio:       req.AspectRatio,
 		ProductImagesURLs: h.taskHistoryService.ConvertURLsToJSON(productImageURLs),

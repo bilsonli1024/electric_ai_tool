@@ -3,9 +3,10 @@ import { Auth } from './components/Auth';
 import { Navbar } from './components/Navbar';
 import { TaskCenter } from './components/TaskCenter';
 import { UserManagement } from './components/UserManagement';
+import { ModelTest } from './components/ModelTest';
 import { apiClient } from './services/api';
 
-type Page = 'generator' | 'tasks' | 'user';
+type Page = 'generator' | 'tasks' | 'user' | 'modeltest';
 
 export const MainApp: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -61,6 +62,7 @@ export const MainApp: React.FC = () => {
         )}
         {currentPage === 'tasks' && <TaskCenter />}
         {currentPage === 'user' && <UserManagement />}
+        {currentPage === 'modeltest' && <ModelTest />}
       </div>
     </div>
   );

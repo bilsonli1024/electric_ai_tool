@@ -37,6 +37,8 @@ type Task struct {
 	Keywords       string     `json:"keywords,omitempty"`
 	SellingPoints  string     `json:"selling_points,omitempty"`
 	CompetitorLink string     `json:"competitor_link,omitempty"`
+	AnalyzeModel   string     `json:"analyze_model"`
+	GenerateModel  string     `json:"generate_model"`
 	Status         int        `json:"status"`
 	ResultData     string     `json:"result_data,omitempty"`
 	ErrorMessage   string     `json:"error_message,omitempty"`
@@ -54,11 +56,18 @@ const (
 	TaskStatusGenerateFailed = 11 // 生成失败
 )
 
+const (
+	ModelGemini   = "gemini"
+	ModelGPT      = "gpt"
+	ModelDeepSeek = "deepseek"
+)
+
 type TaskHistory struct {
 	ID                  int64     `json:"id"`
 	TaskID              int64     `json:"task_id"`
 	UserID              int64     `json:"user_id"`
 	Version             int       `json:"version"`
+	Model               string    `json:"model"`
 	Prompt              string    `json:"prompt,omitempty"`
 	AspectRatio         string    `json:"aspect_ratio,omitempty"`
 	ProductImagesURLs   string    `json:"product_images_urls,omitempty"`

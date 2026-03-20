@@ -1,0 +1,108 @@
+# 模型连通性测试功能
+
+## 新增文件
+
+### 后端
+1. `go_server/handlers/model_test_handler.go` - 模型测试处理器
+   - TestModel: 测试单个AI模型的连通性
+   - TestAllModels: 批量测试所有模型
+
+### 前端
+1. `web/src/components/ModelTest.tsx` - 模型测试页面组件
+   - 支持Gemini、GPT、DeepSeek三种模型
+   - 单独测试或一键测试所有模型
+   - 显示响应时间和测试结果
+
+## 修改文件
+
+### 后端
+1. `go_server/main.go`
+   - 初始化modelTestHandler
+   - 注册API路由: /api/models/test, /api/models/test-all
+
+### 前端
+1. `web/src/services/api.ts`
+   - testModel(model, prompt): 测试单个模型
+   - testAllModels(prompt): 测试所有模型
+
+2. `web/src/MainApp.tsx`
+   - 添加'modeltest'页面类型
+   - 导入并显示ModelTest组件
+
+3. `web/src/components/Navbar.tsx`
+   - 添加"模型测试"导航按钮
+
+## API接口
+
+### POST /api/models/test
+测试单个模型连通性
+
+请求体:
+```json
+{
+  "model": "gemini|gpt|deepseek",
+  "prompt": "测试提示词"
+}
+```
+
+响应:
+```json
+{
+  "success": true,
+  "model": "gemini",
+  "response": "模型响应内容",
+  "response_time_ms": 1234
+}
+```
+
+### POST /api/models/test-all
+批量测试所有模型
+
+请求体:
+```json
+{
+  "prompt": "测试提示词"
+}
+```
+
+响应:
+```json
+{
+  "results": [
+    {
+      "success": true,
+      "model": "gemini",
+      "response": "响应内容",
+      "response_time_ms": 1234
+    },
+    ...
+  ]
+}
+```
+
+## 功能特点
+
+1. 用户界面美观，使用渐变色区分不同模型
+2. 支持自定义测试提示词
+3. 实时显示测试状态（测试中/成功/失败）
+4. 显示响应时间和具体响应内容
+5. 提供配置提示，引导用户检查API Key
+6. 一键测试所有模型功能
+
+## 使用说明
+
+1. 在导航栏点击"模型测试"进入测试页面
+2. 输入测试提示词（可选，有默认值）
+3. 点击"测试连通性"按钮测试单个模型
+4. 或点击"一键测试所有模型"按钮批量测试
+5. 查看测试结果，包括成功/失败状态、响应内容和响应时间
+6. 如果测试失败，检查.env文件中对应的API Key配置
+
+## 环境配置
+
+需要在.env文件中配置以下API Keys:
+- GEMINI_API_KEY
+- OPENAI_API_KEY (可选)
+- OPENAI_API_BASE (可选)
+- DEEPSEEK_API_KEY (可选)
+- DEEPSEEK_API_BASE (可选)

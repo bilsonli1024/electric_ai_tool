@@ -68,6 +68,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentPage, onNavigate }) => {
               </button>
 
               <button
+                onClick={() => onNavigate('modeltest')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  currentPage === 'modeltest'
+                    ? 'bg-indigo-100 text-indigo-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                模型测试
+              </button>
+
+              <button
                 onClick={() => onNavigate('user')}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                   currentPage === 'user'

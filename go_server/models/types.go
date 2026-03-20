@@ -5,6 +5,7 @@ type AnalyzeRequest struct {
 	SellingPoints  string `json:"sellingPoints"`
 	CompetitorLink string `json:"competitorLink"`
 	SKU            string `json:"sku"`
+	Model          string `json:"model,omitempty"`
 }
 
 type SellingPoint struct {
@@ -23,6 +24,7 @@ type GenerateImageRequest struct {
 	AspectRatio   string   `json:"aspectRatio"`
 	ProductImages []string `json:"productImages"`
 	StyleRefImage string   `json:"styleRefImage,omitempty"`
+	Model         string   `json:"model,omitempty"`
 }
 
 type EditImageRequest struct {
