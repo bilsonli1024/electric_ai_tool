@@ -231,17 +231,19 @@ type TaskHandler struct {
 	taskHistoryService *services.TaskHistoryService
 	cdnService         *services.CDNService
 	authService        *services.AuthService
+	unifiedTaskService *services.UnifiedTaskService
 }
 
 func NewTaskHandler(multiModelService *services.MultiModelService, taskService *services.TaskService,
 	taskHistoryService *services.TaskHistoryService, cdnService *services.CDNService,
-	authService *services.AuthService) *TaskHandler {
+	authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService) *TaskHandler {
 	return &TaskHandler{
 		multiModelService:  multiModelService,
 		taskService:        taskService,
 		taskHistoryService: taskHistoryService,
 		cdnService:         cdnService,
 		authService:        authService,
+		unifiedTaskService: unifiedTaskService,
 	}
 }
 
@@ -348,11 +350,36 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// 创建统一任务
+	configJSON, _ := json.Marshal(map[string]interface{}{
+		"sku":             req.SKU,
+		"keywords":        req.Keywords,
+		"selling_points":  req.SellingPoints,
+		"competitor_link": req.CompetitorLink,
+	})
+	unifiedTask := &models.UnifiedTask{
+		UserID:        userID,
+		Username:      username,
+		TaskName:      req.TaskName,
+		TaskType:      "image",
+		Status:        2, // 生成中
+		TaskConfig:    string(configJSON),
+		GenerateModel: req.Model,
+	}
+	unifiedTaskID, err := h.unifiedTaskService.CreateTask(unifiedTask)
+	if err != nil {
+		log.Printf("Failed to create unified task: %v", err)
+		// 不影响主流程，继续执行
+	} else {
+		log.Printf("Created unified task: id=%d, type=image, name=%s", unifiedTaskID, req.TaskName)
+	}
+
 	log.Printf("Created image generation task: id=%d, sku=%s, keywords=%s, user=%s", task.ID, req.SKU, req.Keywords, username)
 
 	// 响应客户端任务已创建
 	utils.RespondJSON(w, map[string]interface{}{
 		"task_id": task.ID,
+		"unified_task_id": unifiedTaskID,
 		"message": "图片生成任务已创建，正在处理中",
 	})
 
@@ -377,6 +404,9 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			log.Printf("Image generation failed for task %d: %v", task.ID, err)
 			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
+			if unifiedTaskID > 0 {
+				h.unifiedTaskService.UpdateTaskStatus(unifiedTaskID, 11, err.Error()) // 生成失败
+			}
 			return
 		}
 
@@ -385,6 +415,9 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			log.Printf("Failed to save generated image to CDN for task %d: %v", task.ID, err)
 			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
+			if unifiedTaskID > 0 {
+				h.unifiedTaskService.UpdateTaskStatus(unifiedTaskID, 11, err.Error()) // 生成失败
+			}
 			return
 		}
 
@@ -407,6 +440,14 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, map[string]interface{}{
 			"generated_image_url": generatedCDNURL,
 		}, "")
+
+		// 更新统一任务状态为完成
+		if unifiedTaskID > 0 {
+			resultJSON, _ := json.Marshal(map[string]interface{}{
+				"generated_image_url": generatedCDNURL,
+			})
+			h.unifiedTaskService.UpdateTaskResult(unifiedTaskID, "", string(resultJSON), 3) // 已完成
+		}
 
 		log.Printf("Image generation completed for task %d, image URL: %s", task.ID, generatedCDNURL)
 	}()

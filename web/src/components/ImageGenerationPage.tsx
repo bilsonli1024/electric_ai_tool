@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Upload, Tag, Hash, Sparkles, Loader2 } from 'lucide-react';
 import { CopywritingSelector } from './CopywritingSelector';
 import { apiClient } from '../services/api';
+import { Toast, ToastType } from './Toast';
 
 export const ImageGenerationPage: React.FC = () => {
   const [sku, setSku] = useState('');
@@ -14,6 +15,7 @@ export const ImageGenerationPage: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gemini');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   const handleCopywritingSelect = (task: any) => {
     try {
@@ -84,7 +86,7 @@ export const ImageGenerationPage: React.FC = () => {
 
   const handleGenerateImages = async () => {
     if (!sku && !keywords && !sellingPoints) {
-      alert('请至少填写SKU、关键词或产品卖点');
+      setToast({ message: '请至少填写SKU、关键词或产品卖点', type: 'error' });
       return;
     }
 
@@ -102,17 +104,14 @@ export const ImageGenerationPage: React.FC = () => {
         copywritingTaskId: selectedCopywritingTaskId || undefined,
       });
       
-      alert(`图片生成任务已创建！\n任务ID: ${response.task_id}\n请到任务中心查看进度`);
+      setToast({ 
+        message: `图片生成任务已创建！\n任务ID: ${response.task_id}\n请到任务中心查看进度`, 
+        type: 'success' 
+      });
       
-      // 清空表单
-      setSku('');
-      setKeywords('');
-      setSellingPoints('');
-      setCompetitorLink('');
-      setUploadedImages([]);
-      setImagePreviews([]);
+      // 不清空表单，保持当前状态
     } catch (error: any) {
-      alert('生成失败: ' + error.message);
+      setToast({ message: '生成失败: ' + error.message, type: 'error' });
     } finally {
       setIsGenerating(false);
     }
@@ -120,6 +119,14 @@ export const ImageGenerationPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          duration={5000}
+          onClose={() => setToast(null)}
+        />
+      )}
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center text-white">

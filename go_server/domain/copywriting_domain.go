@@ -11,17 +11,19 @@ import (
 type CopywritingDomain struct {
 	copywritingService *services.CopywritingService
 	authService        *services.AuthService
+	unifiedTaskService *services.UnifiedTaskService
 }
 
-func NewCopywritingDomain(copywritingService *services.CopywritingService, authService *services.AuthService) *CopywritingDomain {
+func NewCopywritingDomain(copywritingService *services.CopywritingService, authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService) *CopywritingDomain {
 	return &CopywritingDomain{
 		copywritingService: copywritingService,
 		authService:        authService,
+		unifiedTaskService: unifiedTaskService,
 	}
 }
 
 func (d *CopywritingDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddleware) {
-	copywritingHandler := handlers.NewCopywritingHandler(d.copywritingService, d.authService)
+	copywritingHandler := handlers.NewCopywritingHandler(d.copywritingService, d.authService, d.unifiedTaskService)
 
 	http.HandleFunc("/api/copywriting/analyze", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.AnalyzeCompetitors))))
 	http.HandleFunc("/api/copywriting/generate", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GenerateCopy))))

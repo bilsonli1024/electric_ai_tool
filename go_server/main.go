@@ -88,13 +88,13 @@ func main() {
 	authDomain := domain.NewAuthDomain(authService, emailService)
 	authDomain.RegisterRoutes(authMiddleware)
 
-	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService)
+	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService, unifiedTaskService)
 	taskDomain.RegisterRoutes(authMiddleware)
 
 	modelDomain := domain.NewModelDomain(multiModelService)
 	modelDomain.RegisterRoutes(authMiddleware)
 
-	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService)
+	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService, unifiedTaskService)
 	copywritingDomain.RegisterRoutes(authMiddleware)
 
 	// 统一任务管理

@@ -17,12 +17,14 @@ import (
 type CopywritingHandler struct {
 	copywritingService *services.CopywritingService
 	authService        *services.AuthService
+	unifiedTaskService *services.UnifiedTaskService
 }
 
-func NewCopywritingHandler(copywritingService *services.CopywritingService, authService *services.AuthService) *CopywritingHandler {
+func NewCopywritingHandler(copywritingService *services.CopywritingService, authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService) *CopywritingHandler {
 	return &CopywritingHandler{
 		copywritingService: copywritingService,
 		authService:        authService,
+		unifiedTaskService: unifiedTaskService,
 	}
 }
 
@@ -65,10 +67,42 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 		req.TaskName = fmt.Sprintf("文案任务_%d", time.Now().Unix())
 	}
 
+	// 获取用户名
+	username := r.Header.Get("X-Username")
+	if username == "" {
+		user, err := h.authService.GetUserByID(userID)
+		if err == nil && user != nil {
+			username = user.Username
+		}
+	}
+
+	// 创建旧格式任务（保持向后兼容）
 	taskID, err := h.copywritingService.CreateTask(userID, req.URLs, req.Model, req.TaskName)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
+	}
+
+	// 创建统一任务
+	configJSON, _ := json.Marshal(map[string]interface{}{
+		"urls": req.URLs,
+	})
+	unifiedTask := &models.UnifiedTask{
+		UserID:        userID,
+		Username:      username,
+		TaskName:      req.TaskName,
+		TaskType:      "copywriting",
+		Status:        0, // 分析中
+		TaskConfig:    string(configJSON),
+		AnalyzeModel:  req.Model,
+		GenerateModel: req.Model,
+	}
+	unifiedTaskID, err := h.unifiedTaskService.CreateTask(unifiedTask)
+	if err != nil {
+		log.Printf("Failed to create unified task: %v", err)
+		// 不影响主流程，继续执行
+	} else {
+		log.Printf("Created unified task: id=%d, type=copywriting, name=%s", unifiedTaskID, req.TaskName)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -77,6 +111,9 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 	analysis, err := h.copywritingService.AnalyzeCompetitors(ctx, req.URLs, req.Model)
 	if err != nil {
 		h.copywritingService.UpdateTaskStatus(taskID, models.CopyStatusAnalyzeFailed, err.Error())
+		if unifiedTaskID > 0 {
+			h.unifiedTaskService.UpdateTaskStatus(unifiedTaskID, 10, err.Error()) // 分析失败
+		}
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -86,9 +123,16 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// 更新统一任务状态为分析完成
+	if unifiedTaskID > 0 {
+		analysisJSON, _ := json.Marshal(analysis)
+		h.unifiedTaskService.UpdateTaskResult(unifiedTaskID, string(analysisJSON), "", 1) // 分析完成
+	}
+
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    analysis,
 		"task_id": taskID,
+		"unified_task_id": unifiedTaskID,
 	})
 }
 
