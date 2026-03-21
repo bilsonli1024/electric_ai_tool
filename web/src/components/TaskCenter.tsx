@@ -50,8 +50,24 @@ export const TaskCenter: React.FC = () => {
   }, [page, viewMode]);
 
   const getStatusColor = (status: string | number) => {
-    const statusNum = typeof status === 'string' ? parseInt(status) : status;
+    // 新架构使用字符串状态
+    if (typeof status === 'string') {
+      switch (status) {
+        case 'completed':
+          return 'bg-green-100 text-green-800';
+        case 'ongoing':
+          return 'bg-blue-100 text-blue-800';
+        case 'pending':
+          return 'bg-yellow-100 text-yellow-800';
+        case 'failed':
+          return 'bg-red-100 text-red-800';
+        default:
+          return 'bg-gray-100 text-gray-800';
+      }
+    }
     
+    // 兼容旧架构的数字状态
+    const statusNum = typeof status === 'string' ? parseInt(status) : status;
     switch (statusNum) {
       case 3: // 已完成
         return 'bg-green-100 text-green-800';
@@ -69,8 +85,24 @@ export const TaskCenter: React.FC = () => {
   };
 
   const getStatusText = (status: string | number) => {
-    const statusNum = typeof status === 'string' ? parseInt(status) : status;
+    // 新架构使用字符串状态
+    if (typeof status === 'string') {
+      switch (status) {
+        case 'pending':
+          return '待处理';
+        case 'ongoing':
+          return '进行中';
+        case 'completed':
+          return '已完成';
+        case 'failed':
+          return '失败';
+        default:
+          return status;
+      }
+    }
     
+    // 兼容旧架构的数字状态
+    const statusNum = typeof status === 'string' ? parseInt(status) : status;
     switch (statusNum) {
       case 0:
         return '分析中';

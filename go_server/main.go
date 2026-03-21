@@ -102,7 +102,11 @@ func main() {
 	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService, unifiedTaskService, taskCenterService, copywritingTaskService)
 	copywritingDomain.RegisterRoutes(authMiddleware)
 
-	// 统一任务管理
+	// 任务中心（新架构）
+	taskCenterDomain := domain.NewTaskCenterDomain(taskCenterService, authService)
+	taskCenterDomain.RegisterRoutes(authMiddleware)
+
+	// 统一任务管理（旧架构，待废弃）
 	unifiedTaskDomain := domain.NewUnifiedTaskDomain(unifiedTaskService, authService)
 	unifiedTaskDomain.RegisterRoutes(authMiddleware)
 

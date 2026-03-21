@@ -108,27 +108,72 @@ class ApiClient {
   }
 
   // 统一任务接口
-  async getUnifiedTasks(params?: { 
-    limit?: number; 
-    offset?: number; 
+  // 新任务中心API
+  async getTaskCenterTasks(params?: {
+    limit?: number;
+    offset?: number;
+    task_type?: string;
+    task_status?: string;
+    start_time?: number;
+    end_time?: number;
+    view_all?: boolean;
+  }): Promise<{ data: any[]; total: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.task_type) queryParams.append('task_type', params.task_type);
+    if (params?.task_status) queryParams.append('task_status', params.task_status);
+    if (params?.start_time) queryParams.append('start_time', params.start_time.toString());
+    if (params?.end_time) queryParams.append('end_time', params.end_time.toString());
+    if (params?.view_all) queryParams.append('view_all', 'true');
+
+    return this.request<{ data: any[]; total: number }>(
+      `/api/task-center/list?${queryParams.toString()}`
+    );
+  }
+
+  async getTaskCenterDetail(taskId: string): Promise<{ data: any }> {
+    return this.request(`/api/task-center/detail?task_id=${taskId}`);
+  }
+
+  async getTaskCenterStatistics(): Promise<{ data: any }> {
+    return this.request('/api/task-center/statistics');
+  }
+
+  // 旧的统一任务API（兼容）
+  async getUnifiedTasks(params?: {
+    limit?: number;
+    offset?: number;
     task_type?: string;
     status?: number;
     start_time?: string;
     end_time?: string;
     view_all?: boolean;
   }): Promise<{ data: Task[]; total: number }> {
-    const queryParams = new URLSearchParams();
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
-    if (params?.offset) queryParams.append('offset', params.offset.toString());
-    if (params?.task_type) queryParams.append('task_type', params.task_type);
-    if (params?.status !== undefined) queryParams.append('status', params.status.toString());
-    if (params?.start_time) queryParams.append('start_time', params.start_time);
-    if (params?.end_time) queryParams.append('end_time', params.end_time);
-    if (params?.view_all) queryParams.append('view_all', 'true');
+    // 转发到新API
+    const newParams = {
+      limit: params?.limit,
+      offset: params?.offset,
+      task_type: params?.task_type,
+      task_status: params?.status !== undefined ? this.mapOldStatusToNew(params.status) : undefined,
+      start_time: params?.start_time ? parseInt(params.start_time) : undefined,
+      end_time: params?.end_time ? parseInt(params.end_time) : undefined,
+      view_all: params?.view_all,
+    };
+    return this.getTaskCenterTasks(newParams);
+  }
 
-    return this.request<{ data: Task[]; total: number }>(
-      `/api/unified-tasks?${queryParams.toString()}`
-    );
+  private mapOldStatusToNew(oldStatus: number): string {
+    // 旧状态映射到新状态
+    switch (oldStatus) {
+      case 0: return 'ongoing'; // 分析中
+      case 1: return 'ongoing'; // 待生成
+      case 2: return 'ongoing'; // 生成中
+      case 3: return 'completed'; // 已完成
+      case 10: return 'failed'; // 分析失败
+      case 11: return 'failed'; // 生成失败
+      default: return 'pending';
+    }
   }
 
   async getUnifiedTaskStatistics(viewAll?: boolean): Promise<{ data: any }> {
