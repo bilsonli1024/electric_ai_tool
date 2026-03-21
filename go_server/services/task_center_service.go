@@ -1,10 +1,9 @@
 package services
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"electric_ai_tool/go_server/config"
@@ -13,18 +12,37 @@ import (
 
 type TaskCenterService struct{}
 
+func init() {
+	// 初始化随机数种子
+	rand.Seed(time.Now().UnixNano())
+}
+
 func NewTaskCenterService() *TaskCenterService {
 	return &TaskCenterService{}
 }
 
 // GenerateTaskID 生成全局唯一的任务ID
-// 格式：taskType_timestamp_randomString
+// 格式：缩写 + yyyyMMddHHmmss + 5位随机数字
+// 例如：CP20260321135530 12345
 func (s *TaskCenterService) GenerateTaskID(taskType string) string {
-	timestamp := time.Now().Unix()
-	randomBytes := make([]byte, 4)
-	rand.Read(randomBytes)
-	randomString := hex.EncodeToString(randomBytes)
-	return fmt.Sprintf("%s_%d_%s", taskType, timestamp, randomString)
+	// 任务类型缩写
+	var prefix string
+	switch taskType {
+	case models.TaskTypeCopywriting:
+		prefix = "CP"
+	case models.TaskTypeImage:
+		prefix = "IG"
+	default:
+		prefix = "TK"
+	}
+	
+	// 时间格式：yyyyMMddHHmmss
+	timestamp := time.Now().Format("20060102150405")
+	
+	// 生成5位随机数字 (10000-99999)
+	randomNum := rand.Intn(90000) + 10000
+	
+	return fmt.Sprintf("%s%s%05d", prefix, timestamp, randomNum)
 }
 
 // CreateBaseTask 创建任务中心底表记录
@@ -69,55 +87,59 @@ func (s *TaskCenterService) GetTaskByID(taskID string) (*models.TaskCenterBase, 
 	return &task, nil
 }
 
-// GetTasks 获取任务列表
-func (s *TaskCenterService) GetTasks(filter models.TaskCenterFilter) ([]*models.TaskCenterBase, int, error) {
+// GetTasks 获取任务列表（带task_name和sku字段）
+func (s *TaskCenterService) GetTasks(filter models.TaskCenterFilter) ([]*models.TaskCenterListItem, int, error) {
 	// 构建查询条件
 	whereClause := "WHERE 1=1"
 	args := []interface{}{}
 	
 	if filter.Operator != "" {
-		whereClause += " AND operator = ?"
+		whereClause += " AND t.operator = ?"
 		args = append(args, filter.Operator)
 	}
 	
 	if filter.TaskType != "" {
-		whereClause += " AND task_type = ?"
+		whereClause += " AND t.task_type = ?"
 		args = append(args, filter.TaskType)
 	}
 	
 	if filter.TaskStatus != "" {
-		whereClause += " AND task_status = ?"
+		whereClause += " AND t.task_status = ?"
 		args = append(args, filter.TaskStatus)
 	}
 	
 	if filter.StartTime > 0 {
-		whereClause += " AND ctime >= ?"
+		whereClause += " AND t.ctime >= ?"
 		args = append(args, filter.StartTime)
 	}
 	
 	if filter.EndTime > 0 {
-		whereClause += " AND ctime <= ?"
+		whereClause += " AND t.ctime <= ?"
 		args = append(args, filter.EndTime)
 	}
 	
 	// 查询总数
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM task_center_tab %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM task_center_tab t %s", whereClause)
 	var total int
 	err := config.DB.QueryRow(countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, err
 	}
 	
-	// 查询数据
+	// 查询数据（LEFT JOIN详细表获取task_name和sku）
 	if filter.Limit <= 0 {
 		filter.Limit = 20
 	}
 	
 	query := fmt.Sprintf(`
-		SELECT id, task_id, task_type, task_status, operator, ctime, mtime
-		FROM task_center_tab
+		SELECT t.id, t.task_id, t.task_type, t.task_status, t.operator, t.ctime, t.mtime,
+		       COALESCE(c.task_name, '') as task_name,
+		       COALESCE(i.sku, '') as sku
+		FROM task_center_tab t
+		LEFT JOIN copywriting_tasks_tab c ON t.task_id = c.task_id AND t.task_type = 'copywriting'
+		LEFT JOIN tasks_tab i ON t.task_id = i.task_id AND t.task_type = 'image'
 		%s
-		ORDER BY ctime DESC
+		ORDER BY t.ctime DESC
 		LIMIT ? OFFSET ?
 	`, whereClause)
 	
@@ -129,12 +151,13 @@ func (s *TaskCenterService) GetTasks(filter models.TaskCenterFilter) ([]*models.
 	}
 	defer rows.Close()
 	
-	tasks := []*models.TaskCenterBase{}
+	tasks := []*models.TaskCenterListItem{}
 	for rows.Next() {
-		var task models.TaskCenterBase
+		var task models.TaskCenterListItem
 		err := rows.Scan(
 			&task.ID, &task.TaskID, &task.TaskType, &task.TaskStatus,
 			&task.Operator, &task.Ctime, &task.Mtime,
+			&task.TaskName, &task.SKU,
 		)
 		if err != nil {
 			return nil, 0, err

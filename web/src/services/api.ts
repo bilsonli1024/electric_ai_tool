@@ -110,19 +110,21 @@ class ApiClient {
   // 统一任务接口
   // 新任务中心API
   async getTaskCenterTasks(params?: {
-    limit?: number;
-    offset?: number;
+    page_size?: number;
+    page_no?: number;
     task_type?: string;
     task_status?: string;
+    operator?: string;
     start_time?: number;
     end_time?: number;
     view_all?: boolean;
   }): Promise<{ data: any[]; total: number }> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
-    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.page_size) queryParams.append('page_size', params.page_size.toString());
+    if (params?.page_no) queryParams.append('page_no', params.page_no.toString());
     if (params?.task_type) queryParams.append('task_type', params.task_type);
     if (params?.task_status) queryParams.append('task_status', params.task_status);
+    if (params?.operator) queryParams.append('operator', params.operator);
     if (params?.start_time) queryParams.append('start_time', params.start_time.toString());
     if (params?.end_time) queryParams.append('end_time', params.end_time.toString());
     if (params?.view_all) queryParams.append('view_all', 'true');

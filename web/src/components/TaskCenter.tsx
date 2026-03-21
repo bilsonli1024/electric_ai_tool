@@ -1,14 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { Task } from '../types';
 import { apiClient } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, User } from 'lucide-react';
 
 export const TaskCenter: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [pageNo, setPageNo] = useState(1);
   const [viewMode, setViewMode] = useState<'my' | 'all'>('my');
-  const limit = 20;
+  const pageSize = 20;
+  const navigate = useNavigate();
+
+  // 筛选器状态
+  const [filterOperator, setFilterOperator] = useState('');
+  const [filterStartTime, setFilterStartTime] = useState('');
+  const [filterEndTime, setFilterEndTime] = useState('');
+
+  // 格式化时间戳（秒级转为可读格式）
+  const formatTimestamp = (timestamp: number | string | undefined) => {
+    if (!timestamp) return '-';
+    
+    // 如果是字符串且为ISO格式（旧格式）
+    if (typeof timestamp === 'string') {
+      const date = new Date(timestamp);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleString('zh-CN');
+      }
+      return timestamp;
+    }
+    
+    // 如果是秒级时间戳（新格式）
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleString('zh-CN');
+  };
+
+  // 查看任务详情
+  const handleViewDetail = (task: any) => {
+    const taskType = task.task_type || task.type;
+    const taskId = task.task_id || task.id;
+    
+    if (taskType === 'copywriting') {
+      navigate(`/copywriting?task_id=${taskId}`);
+    } else if (taskType === 'image') {
+      navigate(`/image-generation?task_id=${taskId}`);
+    }
+  };
+
+  // 获取任务名称/SKU
+  const getTaskName = (task: any) => {
+    const taskType = task.task_type || task.type;
+    if (taskType === 'copywriting') {
+      // 文案生成任务显示任务名称
+      return task.task_name || '-';
+    } else if (taskType === 'image') {
+      // 图片生成任务显示SKU
+      return task.sku || '-';
+    }
+    return task.task_name || task.sku || task.keywords || '-';
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -16,13 +67,28 @@ export const TaskCenter: React.FC = () => {
     const loadTasks = async () => {
       setLoading(true);
       try {
-        const offset = (page - 1) * limit;
+        // 转换时间筛选为秒级时间戳
+        let startTimestamp: number | undefined;
+        let endTimestamp: number | undefined;
         
-        // 使用统一任务接口
-        const response = await apiClient.getUnifiedTasks({
-          limit,
-          offset,
-          view_all: viewMode === 'all'
+        if (filterStartTime) {
+          startTimestamp = Math.floor(new Date(filterStartTime).getTime() / 1000);
+        }
+        if (filterEndTime) {
+          // 结束时间设为当天的23:59:59
+          const endDate = new Date(filterEndTime);
+          endDate.setHours(23, 59, 59, 999);
+          endTimestamp = Math.floor(endDate.getTime() / 1000);
+        }
+        
+        // 使用新的任务中心接口
+        const response = await apiClient.getTaskCenterTasks({
+          page_size: pageSize,
+          page_no: pageNo,
+          view_all: viewMode === 'all',
+          operator: filterOperator || undefined,
+          start_time: startTimestamp,
+          end_time: endTimestamp,
         });
         
         if (!cancelled) {
@@ -47,7 +113,7 @@ export const TaskCenter: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [page, viewMode]);
+  }, [pageNo, viewMode, filterOperator, filterStartTime, filterEndTime]);
 
   const getStatusColor = (status: string | number) => {
     // 新架构使用字符串状态
@@ -66,18 +132,17 @@ export const TaskCenter: React.FC = () => {
       }
     }
     
-    // 兼容旧架构的数字状态
-    const statusNum = typeof status === 'string' ? parseInt(status) : status;
-    switch (statusNum) {
-      case 3: // 已完成
-        return 'bg-green-100 text-green-800';
-      case 0: // 分析中
-      case 2: // 生成中
+    // 旧架构使用数字状态（保持兼容）
+    switch (status) {
+      case 0:
+      case 2:
         return 'bg-blue-100 text-blue-800';
-      case 1: // 分析完成，待生成
+      case 1:
         return 'bg-yellow-100 text-yellow-800';
-      case 10: // 分析失败
-      case 11: // 生成失败
+      case 3:
+        return 'bg-green-100 text-green-800';
+      case 10:
+      case 11:
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -101,9 +166,8 @@ export const TaskCenter: React.FC = () => {
       }
     }
     
-    // 兼容旧架构的数字状态
-    const statusNum = typeof status === 'string' ? parseInt(status) : status;
-    switch (statusNum) {
+    // 旧架构使用数字状态（保持兼容）
+    switch (status) {
       case 0:
         return '分析中';
       case 1:
@@ -122,17 +186,9 @@ export const TaskCenter: React.FC = () => {
   };
 
   const getTaskTypeText = (task: any) => {
-    // 优先使用task_type
     const taskType = task.task_type || task.type;
     
     if (taskType === 'copywriting') {
-      // 根据状态显示文案任务的具体阶段
-      if (task.status === 0) return '文案分析中';
-      if (task.status === 1) return '文案待生成';
-      if (task.status === 2) return '文案生成中';
-      if (task.status === 3) return '文案已完成';
-      if (task.status === 10) return '文案分析失败';
-      if (task.status === 11) return '文案生成失败';
       return '文案生成';
     }
     
@@ -151,7 +207,7 @@ export const TaskCenter: React.FC = () => {
     }
   };
 
-  const totalPages = Math.ceil(total / limit);
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -162,7 +218,7 @@ export const TaskCenter: React.FC = () => {
           <button
             onClick={() => {
               setViewMode('my');
-              setPage(1);
+              setPageNo(1);
             }}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               viewMode === 'my'
@@ -175,7 +231,7 @@ export const TaskCenter: React.FC = () => {
           <button
             onClick={() => {
               setViewMode('all');
-              setPage(1);
+              setPageNo(1);
             }}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               viewMode === 'all'
@@ -186,6 +242,80 @@ export const TaskCenter: React.FC = () => {
             全部任务
           </button>
         </div>
+      </div>
+
+      {/* 筛选器 */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 创建者筛选 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <User size={16} />
+              创建者
+            </label>
+            <input
+              type="text"
+              placeholder="输入邮箱或用户名"
+              value={filterOperator}
+              onChange={(e) => {
+                setFilterOperator(e.target.value);
+                setPageNo(1);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+            />
+          </div>
+
+          {/* 开始时间 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <Calendar size={16} />
+              开始时间
+            </label>
+            <input
+              type="date"
+              value={filterStartTime}
+              onChange={(e) => {
+                setFilterStartTime(e.target.value);
+                setPageNo(1);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+            />
+          </div>
+
+          {/* 结束时间 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+              <Calendar size={16} />
+              结束时间
+            </label>
+            <input
+              type="date"
+              value={filterEndTime}
+              onChange={(e) => {
+                setFilterEndTime(e.target.value);
+                setPageNo(1);
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+            />
+          </div>
+        </div>
+
+        {/* 清空筛选器按钮 */}
+        {(filterOperator || filterStartTime || filterEndTime) && (
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={() => {
+                setFilterOperator('');
+                setFilterStartTime('');
+                setFilterEndTime('');
+                setPageNo(1);
+              }}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              清空筛选
+            </button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -210,47 +340,54 @@ export const TaskCenter: React.FC = () => {
                     类型
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    SKU/关键词
+                    任务名称/SKU
                   </th>
-                  {viewMode === 'all' && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      创建者
-                    </th>
-                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    创建者
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     状态
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     创建时间
                   </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    操作
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {tasks.map((task) => (
-                  <tr key={task.id} className="hover:bg-gray-50">
+                  <tr key={task.id} className="hover:bg-gray-50 cursor-pointer">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      #{task.id}
+                      {task.task_id || `#${task.id}`}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {getTaskTypeText(task)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <div className="max-w-xs truncate">
-                        {task.task_name || task.sku || task.keywords || '-'}
+                        {getTaskName(task)}
                       </div>
                     </td>
-                    {viewMode === 'all' && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {task.username || '-'}
-                      </td>
-                    )}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {task.operator || task.username || '-'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.status)}`}>
-                        {getStatusText(task.status)}
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.task_status || task.status)}`}>
+                        {getStatusText(task.task_status || task.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(task.created_at).toLocaleString('zh-CN')}
+                      {formatTimestamp(task.ctime || task.created_at)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleViewDetail(task)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        查看详情
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -261,18 +398,18 @@ export const TaskCenter: React.FC = () => {
           {totalPages > 1 && (
             <div className="mt-6 flex justify-center space-x-2">
               <button
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
+                onClick={() => setPageNo(Math.max(1, pageNo - 1))}
+                disabled={pageNo === 1}
                 className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 上一页
               </button>
               <span className="px-4 py-2 text-gray-700">
-                第 {page} / {totalPages} 页 (共 {total} 条)
+                第 {pageNo} / {totalPages} 页 (共 {total} 条)
               </span>
               <button
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
-                disabled={page === totalPages}
+                onClick={() => setPageNo(Math.min(totalPages, pageNo + 1))}
+                disabled={pageNo === totalPages}
                 className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 下一页

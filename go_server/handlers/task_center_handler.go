@@ -61,18 +61,32 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 		Offset: 0,
 	}
 
-	// 分页参数
-	if limitStr := query.Get("limit"); limitStr != "" {
+	// 分页参数 - 支持page_size/page_no和limit/offset两种方式
+	pageSize := 20
+	pageNo := 1
+	
+	if pageSizeStr := query.Get("page_size"); pageSizeStr != "" {
+		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 {
+			pageSize = ps
+		}
+	} else if limitStr := query.Get("limit"); limitStr != "" {
 		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
-			filter.Limit = limit
+			pageSize = limit
 		}
 	}
-
-	if offsetStr := query.Get("offset"); offsetStr != "" {
+	
+	if pageNoStr := query.Get("page_no"); pageNoStr != "" {
+		if pn, err := strconv.Atoi(pageNoStr); err == nil && pn > 0 {
+			pageNo = pn
+		}
+	} else if offsetStr := query.Get("offset"); offsetStr != "" {
 		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
-			filter.Offset = offset
+			pageNo = (offset / pageSize) + 1
 		}
 	}
+	
+	filter.Limit = pageSize
+	filter.Offset = (pageNo - 1) * pageSize
 
 	// 筛选条件
 	if taskType := query.Get("task_type"); taskType != "" {
@@ -81,6 +95,10 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 	if taskStatus := query.Get("task_status"); taskStatus != "" {
 		filter.TaskStatus = taskStatus
+	}
+	
+	if operator := query.Get("operator"); operator != "" {
+		filter.Operator = operator
 	}
 
 	if startTimeStr := query.Get("start_time"); startTimeStr != "" {
@@ -97,7 +115,7 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 	// 是否查看所有任务（管理员）
 	viewAll := query.Get("view_all") == "true"
-	if !viewAll {
+	if !viewAll && filter.Operator == "" {
 		// 默认只查看自己的任务
 		filter.Operator = user.Email
 	}

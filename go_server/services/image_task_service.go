@@ -46,9 +46,13 @@ func (s *ImageTaskService) SaveError(taskID, errorMessage string) error {
 // GetTaskByID 获取任务详情
 func (s *ImageTaskService) GetTaskByID(taskID string) (*models.ImageTaskDetail, error) {
 	query := `
-		SELECT id, task_id, sku, keywords, selling_points, competitor_link,
-		       copywriting_task_id, generate_model, aspect_ratio,
-		       result_data, generated_image_urls, error_message,
+		SELECT id, task_id, 
+		       COALESCE(sku, ''), COALESCE(keywords, ''), 
+		       COALESCE(selling_points, ''), COALESCE(competitor_link, ''),
+		       COALESCE(copywriting_task_id, ''), COALESCE(generate_model, ''), 
+		       COALESCE(aspect_ratio, ''),
+		       COALESCE(result_data, ''), COALESCE(generated_image_urls, ''), 
+		       COALESCE(error_message, ''),
 		       created_at, updated_at
 		FROM tasks_tab
 		WHERE task_id = ?

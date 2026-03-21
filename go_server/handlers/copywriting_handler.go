@@ -97,7 +97,7 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 	
 	// 3. 创建文案任务详细表记录
 	urlsJSON, _ := json.Marshal(req.URLs)
-	if err := h.copywritingTaskService.CreateTask(taskID, string(urlsJSON), req.Model); err != nil {
+	if err := h.copywritingTaskService.CreateTask(taskID, req.TaskName, string(urlsJSON), req.Model); err != nil {
 		log.Printf("Failed to create copywriting task: %v", err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return

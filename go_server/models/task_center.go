@@ -13,6 +13,19 @@ type TaskCenterBase struct {
 	Mtime      int64  `json:"mtime"`        // 更新时间（秒级时间戳）
 }
 
+// TaskCenterListItem 任务中心列表项（包含详细字段）
+type TaskCenterListItem struct {
+	ID         int64  `json:"id"`
+	TaskID     string `json:"task_id"`
+	TaskType   string `json:"task_type"`
+	TaskStatus string `json:"task_status"`
+	Operator   string `json:"operator"`
+	Ctime      int64  `json:"ctime"`
+	Mtime      int64  `json:"mtime"`
+	TaskName   string `json:"task_name,omitempty"` // 文案生成任务名称
+	SKU        string `json:"sku,omitempty"`       // 图片生成SKU
+}
+
 // TaskCenterFilter 任务筛选条件
 type TaskCenterFilter struct {
 	Operator   string // 按操作者筛选

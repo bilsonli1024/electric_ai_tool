@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, ArrowRight, ArrowLeft, Sparkles, CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
 import { apiClient } from '../services/api';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 type Step = 'competitors' | 'configuration' | 'result';
 
@@ -43,13 +44,15 @@ interface GeneratedCopy {
 }
 
 export const CopywritingGenerator: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>('competitors');
   const [competitorUrls, setCompetitorUrls] = useState<string[]>(['']);
   const [taskName, setTaskName] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState('gemini');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<CompetitorAnalysis | null>(null);
-  const [taskId, setTaskId] = useState<number | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [selectedSellingPoints, setSelectedSellingPoints] = useState<string[]>([]);
   const [selectedReviewInsights, setSelectedReviewInsights] = useState<string[]>([]);
@@ -68,6 +71,111 @@ export const CopywritingGenerator: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<GeneratedCopy | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isLoadingTask, setIsLoadingTask] = useState(false);
+
+  // 从URL参数加载任务
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const taskIdParam = searchParams.get('task_id');
+    
+    if (taskIdParam) {
+      loadTaskDetail(taskIdParam);
+    }
+  }, [location.search]);
+
+  const loadTaskDetail = async (taskIdToLoad: string) => {
+    setIsLoadingTask(true);
+    try {
+      const detail = await apiClient.getTaskCenterDetail(taskIdToLoad);
+      
+      if (detail.task_type !== 'copywriting') {
+        alert('任务类型不匹配');
+        return;
+      }
+
+      const copyDetail = detail.detail_data as any;
+      
+      // 设置基本信息
+      setTaskId(detail.task_id);
+      setSelectedModel(copyDetail.analyze_model || 'gemini');
+      
+      // 解析竞品链接
+      if (copyDetail.competitor_urls) {
+        try {
+          const urls = JSON.parse(copyDetail.competitor_urls);
+          setCompetitorUrls(urls.length > 0 ? urls : ['']);
+        } catch (e) {
+          setCompetitorUrls(['']);
+        }
+      }
+      
+      // 解析分析结果
+      if (copyDetail.analysis_result) {
+        try {
+          const analysisData = JSON.parse(copyDetail.analysis_result);
+          setAnalysis(analysisData);
+          
+          // 如果有用户选择的数据，使用用户选择的；否则使用分析出的全部数据
+          if (copyDetail.user_selected_data) {
+            const selectedData = JSON.parse(copyDetail.user_selected_data);
+            setSelectedKeywords(selectedData.keywords || []);
+            setSelectedSellingPoints(selectedData.sellingPoints || []);
+            setSelectedReviewInsights(selectedData.reviewInsights || []);
+            setSelectedImageInsights(selectedData.imageInsights || []);
+          } else {
+            // 默认全选
+            setSelectedKeywords(analysisData.keywords?.map((k: Keyword) => k.original) || []);
+            setSelectedSellingPoints(analysisData.sellingPoints?.map((p: BilingualText) => p.original) || []);
+            setSelectedReviewInsights(analysisData.reviewInsights?.map((i: BilingualText) => i.original) || []);
+            setSelectedImageInsights(analysisData.imageInsights?.map((i: BilingualText) => i.original) || []);
+          }
+        } catch (e) {
+          console.error('Failed to parse analysis result:', e);
+        }
+      }
+      
+      // 解析产品详情
+      if (copyDetail.product_details) {
+        try {
+          const details = JSON.parse(copyDetail.product_details);
+          setProductDetails(details);
+        } catch (e) {
+          console.error('Failed to parse product details:', e);
+        }
+      }
+      
+      // 解析生成的文案
+      if (copyDetail.generated_copy) {
+        try {
+          const copy = JSON.parse(copyDetail.generated_copy);
+          setResult(copy);
+        } catch (e) {
+          console.error('Failed to parse generated copy:', e);
+        }
+      }
+      
+      // 根据任务状态设置步骤
+      if (detail.task_status === 'pending') {
+        setStep('competitors');
+      } else if (detail.task_status === 'ongoing') {
+        if (copyDetail.analysis_result && !copyDetail.generated_copy) {
+          setStep('configuration');
+        } else if (copyDetail.generated_copy) {
+          setStep('result');
+        } else {
+          setStep('competitors');
+        }
+      } else if (detail.task_status === 'completed') {
+        setStep('result');
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to load task:', error);
+      alert('加载任务失败: ' + (error.message || '未知错误'));
+    } finally {
+      setIsLoadingTask(false);
+    }
+  };
 
   const handleAddUrl = () => setCompetitorUrls([...competitorUrls, '']);
   
@@ -174,12 +282,22 @@ ${result.searchTerms}
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {isLoadingTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin text-orange-500" size={48} />
+            <p className="text-lg font-medium">正在加载任务数据...</p>
+          </div>
+        </div>
+      )}
+      
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-pink-500 rounded-xl flex items-center justify-center text-white">
             <Sparkles size={20} />
           </div>
           <h2 className="text-3xl font-bold text-gray-800">文案生成</h2>
+          {taskId && <span className="text-sm text-gray-500">任务ID: {taskId}</span>}
         </div>
         <p className="text-gray-600">分析竞品并生成高转化率的产品文案</p>
       </div>

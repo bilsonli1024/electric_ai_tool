@@ -12,13 +12,13 @@ func NewCopywritingTaskService() *CopywritingTaskService {
 }
 
 // CreateTask 创建文案生成任务详细记录
-func (s *CopywritingTaskService) CreateTask(taskID, competitorURLs, analyzeModel string) error {
+func (s *CopywritingTaskService) CreateTask(taskID, taskName, competitorURLs, analyzeModel string) error {
 	query := `
-		INSERT INTO copywriting_tasks_tab (task_id, competitor_urls, analyze_model)
-		VALUES (?, ?, ?)
+		INSERT INTO copywriting_tasks_tab (task_id, task_name, competitor_urls, analyze_model)
+		VALUES (?, ?, ?, ?)
 	`
 	
-	_, err := config.DB.Exec(query, taskID, competitorURLs, analyzeModel)
+	_, err := config.DB.Exec(query, taskID, taskName, competitorURLs, analyzeModel)
 	return err
 }
 
@@ -61,9 +61,11 @@ func (s *CopywritingTaskService) SaveError(taskID, errorMessage string) error {
 // GetTaskByID 获取任务详情
 func (s *CopywritingTaskService) GetTaskByID(taskID string) (*models.CopywritingTaskDetail, error) {
 	query := `
-		SELECT id, task_id, competitor_urls, analysis_result, analyze_model,
-		       user_selected_data, product_details, generated_copy, generate_model,
-		       error_message, created_at, updated_at
+		SELECT id, task_id, competitor_urls, 
+		       COALESCE(analysis_result, ''), COALESCE(analyze_model, ''),
+		       COALESCE(user_selected_data, ''), COALESCE(product_details, ''), 
+		       COALESCE(generated_copy, ''), COALESCE(generate_model, ''),
+		       COALESCE(error_message, ''), created_at, updated_at
 		FROM copywriting_tasks_tab
 		WHERE task_id = ?
 	`
