@@ -203,16 +203,23 @@ func (s *TaskCenterService) GetTaskDetail(taskID string) (*models.TaskCenterDeta
 // getCopywritingDetail 获取文案生成详细数据
 func (s *TaskCenterService) getCopywritingDetail(taskID string) (*models.CopywritingTaskDetail, error) {
 	query := `
-		SELECT id, task_id, competitor_urls, analysis_result, analyze_model,
-		       user_selected_data, product_details, generated_copy, generate_model,
-		       error_message, created_at, updated_at
+		SELECT id, task_id, 
+		       COALESCE(task_name, '') as task_name,
+		       competitor_urls, 
+		       COALESCE(analysis_result, ''), COALESCE(analyze_model, ''),
+		       COALESCE(user_selected_data, ''), COALESCE(product_details, ''), 
+		       COALESCE(generated_copy, ''), COALESCE(generate_model, ''),
+		       COALESCE(error_message, ''), created_at, updated_at
 		FROM copywriting_tasks_tab
 		WHERE task_id = ?
 	`
 	
 	var detail models.CopywritingTaskDetail
+	var taskName string // 临时变量，因为model中还没有TaskName字段
+	
 	err := config.DB.QueryRow(query, taskID).Scan(
-		&detail.ID, &detail.TaskID, &detail.CompetitorURLs, &detail.AnalysisResult,
+		&detail.ID, &detail.TaskID, &taskName,
+		&detail.CompetitorURLs, &detail.AnalysisResult,
 		&detail.AnalyzeModel, &detail.UserSelectedData, &detail.ProductDetails,
 		&detail.GeneratedCopy, &detail.GenerateModel, &detail.ErrorMessage,
 		&detail.CreatedAt, &detail.UpdatedAt,
@@ -231,9 +238,13 @@ func (s *TaskCenterService) getCopywritingDetail(taskID string) (*models.Copywri
 // getImageDetail 获取图片生成详细数据
 func (s *TaskCenterService) getImageDetail(taskID string) (*models.ImageTaskDetail, error) {
 	query := `
-		SELECT id, task_id, sku, keywords, selling_points, competitor_link,
-		       copywriting_task_id, generate_model, aspect_ratio,
-		       result_data, generated_image_urls, error_message,
+		SELECT id, task_id, 
+		       COALESCE(sku, ''), COALESCE(keywords, ''), 
+		       COALESCE(selling_points, ''), COALESCE(competitor_link, ''),
+		       COALESCE(copywriting_task_id, ''), COALESCE(generate_model, ''), 
+		       COALESCE(aspect_ratio, ''),
+		       COALESCE(result_data, ''), COALESCE(generated_image_urls, ''), 
+		       COALESCE(error_message, ''),
 		       created_at, updated_at
 		FROM tasks_tab
 		WHERE task_id = ?
