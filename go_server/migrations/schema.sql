@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS tasks_tab (
     sku VARCHAR(128),
     keywords VARCHAR(512),
     selling_points TEXT,
-    competitor_link VARCHAR(512),
+    competitor_link TEXT COMMENT '竞品链接，支持长URL',
     copywriting_task_id BIGINT COMMENT '关联的文案生成任务ID',
     analyze_model VARCHAR(32) DEFAULT 'gemini' COMMENT '分析使用的模型',
     generate_model VARCHAR(32) DEFAULT 'gemini' COMMENT '生成使用的模型',

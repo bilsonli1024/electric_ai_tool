@@ -29,7 +29,7 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "正在导入表结构..."
     
-    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" < schema.sql
+    mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" < migrations/schema.sql
     
     if [ $? -eq 0 ]; then
         echo "✅ 表结构导入成功"
