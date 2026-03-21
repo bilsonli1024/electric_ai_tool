@@ -289,17 +289,17 @@ func (h *TaskHandler) AnalyzeWithTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzing, nil, "")
+	h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusAnalyzing, nil, "")
 
 	ctx := context.Background()
 	sellingPoints, err := h.multiModelService.AnalyzeSellingPoints(ctx, req)
 	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzeFailed, nil, err.Error())
+		h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusAnalyzeFailed, nil, err.Error())
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusAnalyzed, sellingPoints, "")
+	h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusAnalyzed, sellingPoints, "")
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    sellingPoints,
@@ -388,7 +388,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		ctx := context.Background()
 		
 		// 更新状态为生成中
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerating, nil, "")
+		h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusGenerating, nil, "")
 
 		// 构建AI生成提示词
 		prompt := h.buildImageGenerationPrompt(req.SKU, req.Keywords, req.SellingPoints)
@@ -403,7 +403,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		generatedDataURL, err := h.multiModelService.GenerateImage(ctx, imageReq)
 		if err != nil {
 			log.Printf("Image generation failed for task %d: %v", task.ID, err)
-			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
+			h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusGenerateFailed, nil, err.Error())
 			if unifiedTaskID > 0 {
 				h.unifiedTaskService.UpdateTaskStatus(unifiedTaskID, 11, err.Error()) // 生成失败
 			}
@@ -414,7 +414,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		generatedCDNURL, err := h.taskHistoryService.SaveGeneratedImageToCDN(userID, generatedDataURL, h.cdnService)
 		if err != nil {
 			log.Printf("Failed to save generated image to CDN for task %d: %v", task.ID, err)
-			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
+			h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusGenerateFailed, nil, err.Error())
 			if unifiedTaskID > 0 {
 				h.unifiedTaskService.UpdateTaskStatus(unifiedTaskID, 11, err.Error()) // 生成失败
 			}
@@ -437,7 +437,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		}
 
 		// 更新任务状态为完成
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, map[string]interface{}{
+		h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusCompleted, map[string]interface{}{
 			"generated_image_url": generatedCDNURL,
 		}, "")
 

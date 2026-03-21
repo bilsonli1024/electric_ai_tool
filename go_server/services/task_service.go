@@ -26,7 +26,7 @@ func (s *TaskService) CreateTask(userID int64, sku string, keywords string, sell
 	query := `INSERT INTO tasks_tab (user_id, sku, keywords, selling_points, competitor_link, analyze_model, generate_model, status) 
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
-	result, err := config.DB.Exec(query, userID, sku, keywords, sellingPoints, competitorLink, analyzeModel, generateModel, models.TaskStatusAnalyzing)
+	result, err := config.DB.Exec(query, userID, sku, keywords, sellingPoints, competitorLink, analyzeModel, generateModel, models.LegacyTaskStatusAnalyzing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}
@@ -41,7 +41,7 @@ func (s *TaskService) CreateTask(userID int64, sku string, keywords string, sell
 		CompetitorLink: competitorLink,
 		AnalyzeModel:   analyzeModel,
 		GenerateModel:  generateModel,
-		Status:         models.TaskStatusAnalyzing,
+		Status:         models.LegacyTaskStatusAnalyzing,
 	}
 
 	return task, nil
@@ -182,17 +182,17 @@ func (s *TaskService) GetAllTasks(limit int, offset int) ([]models.Task, int, er
 
 func (s *TaskService) GetTaskStatusText(status int) string {
 	switch status {
-	case models.TaskStatusAnalyzing:
+	case models.LegacyTaskStatusAnalyzing:
 		return "分析中"
-	case models.TaskStatusAnalyzed:
+	case models.LegacyTaskStatusAnalyzed:
 		return "分析完成"
-	case models.TaskStatusGenerating:
+	case models.LegacyTaskStatusGenerating:
 		return "生成图片中"
-	case models.TaskStatusCompleted:
+	case models.LegacyTaskStatusCompleted:
 		return "已完成"
-	case models.TaskStatusAnalyzeFailed:
+	case models.LegacyTaskStatusAnalyzeFailed:
 		return "分析失败"
-	case models.TaskStatusGenerateFailed:
+	case models.LegacyTaskStatusGenerateFailed:
 		return "生成失败"
 	default:
 		return "未知状态"

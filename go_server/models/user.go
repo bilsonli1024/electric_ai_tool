@@ -48,12 +48,12 @@ type Task struct {
 }
 
 const (
-	TaskStatusAnalyzing      = 0  // 分析中
-	TaskStatusAnalyzed       = 1  // 分析完成
-	TaskStatusGenerating     = 2  // 生成图片中
-	TaskStatusCompleted      = 3  // 已完成
-	TaskStatusAnalyzeFailed  = 10 // 分析失败
-	TaskStatusGenerateFailed = 11 // 生成失败
+	LegacyTaskStatusAnalyzing      = 0  // 分析中（旧格式，已废弃）
+	LegacyTaskStatusAnalyzed       = 1  // 分析完成（旧格式，已废弃）
+	LegacyTaskStatusGenerating     = 2  // 生成图片中（旧格式，已废弃）
+	LegacyTaskStatusCompleted      = 3  // 已完成（旧格式，已废弃）
+	LegacyTaskStatusAnalyzeFailed  = 10 // 分析失败（旧格式，已废弃）
+	LegacyTaskStatusGenerateFailed = 11 // 生成失败（旧格式，已废弃）
 )
 
 const (
