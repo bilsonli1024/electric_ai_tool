@@ -64,6 +64,7 @@ func main() {
 	cdnService := services.NewCDNService()
 	copywritingService := services.NewCopywritingService(multiModelService)
 	rbacService := services.NewRBACService()
+	unifiedTaskService := services.NewUnifiedTaskService()
 
 	// Initialize RBAC
 	if err := rbacService.InitializeDefaultRolesAndPermissions(); err != nil {
@@ -95,6 +96,10 @@ func main() {
 
 	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService)
 	copywritingDomain.RegisterRoutes(authMiddleware)
+
+	// 统一任务管理
+	unifiedTaskDomain := domain.NewUnifiedTaskDomain(unifiedTaskService, authService)
+	unifiedTaskDomain.RegisterRoutes(authMiddleware)
 
 	// Static file serving
 	distPath := filepath.Join(execDir, "../web/dist")

@@ -17,9 +17,13 @@ export const TaskCenter: React.FC = () => {
       setLoading(true);
       try {
         const offset = (page - 1) * limit;
-        const response = viewMode === 'my'
-          ? await apiClient.getTasks({ limit, offset })
-          : await apiClient.getAllTasks({ limit, offset });
+        
+        // 使用统一任务接口
+        const response = await apiClient.getUnifiedTasks({
+          limit,
+          offset,
+          view_all: viewMode === 'all'
+        });
         
         if (!cancelled) {
           setTasks(response?.data || []);
@@ -45,44 +49,73 @@ export const TaskCenter: React.FC = () => {
     };
   }, [page, viewMode]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
+  const getStatusColor = (status: string | number) => {
+    const statusNum = typeof status === 'string' ? parseInt(status) : status;
+    
+    switch (statusNum) {
+      case 3: // 已完成
         return 'bg-green-100 text-green-800';
-      case 'processing':
+      case 0: // 分析中
+      case 2: // 生成中
         return 'bg-blue-100 text-blue-800';
-      case 'failed':
+      case 1: // 分析完成，待生成
+        return 'bg-yellow-100 text-yellow-800';
+      case 10: // 分析失败
+      case 11: // 生成失败
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'completed':
+  const getStatusText = (status: string | number) => {
+    const statusNum = typeof status === 'string' ? parseInt(status) : status;
+    
+    switch (statusNum) {
+      case 0:
+        return '分析中';
+      case 1:
+        return '待生成';
+      case 2:
+        return '生成中';
+      case 3:
         return '已完成';
-      case 'processing':
-        return '处理中';
-      case 'failed':
-        return '失败';
+      case 10:
+        return '分析失败';
+      case 11:
+        return '生成失败';
       default:
-        return '等待中';
+        return '未知';
     }
   };
 
-  const getTaskTypeText = (type: string) => {
-    switch (type) {
+  const getTaskTypeText = (task: any) => {
+    // 优先使用task_type
+    const taskType = task.task_type || task.type;
+    
+    if (taskType === 'copywriting') {
+      // 根据状态显示文案任务的具体阶段
+      if (task.status === 0) return '文案分析中';
+      if (task.status === 1) return '文案待生成';
+      if (task.status === 2) return '文案生成中';
+      if (task.status === 3) return '文案已完成';
+      if (task.status === 10) return '文案分析失败';
+      if (task.status === 11) return '文案生成失败';
+      return '文案生成';
+    }
+    
+    switch (taskType) {
       case 'analyze':
         return '产品分析';
       case 'generate_image':
+      case 'image':
         return '图片生成';
       case 'edit_image':
         return '图片编辑';
       case 'aplus_content':
         return 'A+内容';
       default:
-        return type;
+        return taskType || '未知任务';
     }
   };
 
@@ -167,11 +200,11 @@ export const TaskCenter: React.FC = () => {
                       #{task.id}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {getTaskTypeText(task.task_type)}
+                      {getTaskTypeText(task)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       <div className="max-w-xs truncate">
-                        {task.sku || task.keywords || '-'}
+                        {task.task_name || task.sku || task.keywords || '-'}
                       </div>
                     </td>
                     {viewMode === 'all' && (

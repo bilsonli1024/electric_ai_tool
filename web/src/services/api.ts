@@ -107,6 +107,39 @@ class ApiClient {
     );
   }
 
+  // 统一任务接口
+  async getUnifiedTasks(params?: { 
+    limit?: number; 
+    offset?: number; 
+    task_type?: string;
+    status?: number;
+    start_time?: string;
+    end_time?: string;
+    view_all?: boolean;
+  }): Promise<{ data: Task[]; total: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.task_type) queryParams.append('task_type', params.task_type);
+    if (params?.status !== undefined) queryParams.append('status', params.status.toString());
+    if (params?.start_time) queryParams.append('start_time', params.start_time);
+    if (params?.end_time) queryParams.append('end_time', params.end_time);
+    if (params?.view_all) queryParams.append('view_all', 'true');
+
+    return this.request<{ data: Task[]; total: number }>(
+      `/api/unified-tasks?${queryParams.toString()}`
+    );
+  }
+
+  async getUnifiedTaskStatistics(viewAll?: boolean): Promise<{ data: any }> {
+    const queryParams = new URLSearchParams();
+    if (viewAll) queryParams.append('view_all', 'true');
+    
+    return this.request<{ data: any }>(
+      `/api/unified-tasks/statistics?${queryParams.toString()}`
+    );
+  }
+
   async getTaskHistory(taskId: number, params?: { limit?: number; offset?: number }): Promise<{ data: TaskHistory[]; total: number }> {
     const queryParams = new URLSearchParams({ task_id: taskId.toString() });
     if (params?.limit) queryParams.append('limit', params.limit.toString());

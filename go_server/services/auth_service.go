@@ -308,6 +308,31 @@ func (s *AuthService) Logout(sessionID string) error {
 	return nil
 }
 
+func (s *AuthService) GetUserByID(userID int64) (*models.User, error) {
+	var user models.User
+	var lastLoginAt sql.NullTime
+	
+	err := config.DB.QueryRow(`
+		SELECT id, username, email, created_at, updated_at, status 
+		FROM users_tab 
+		WHERE id = ?`,
+		userID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt, &user.Status)
+	
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user: %w", err)
+	}
+	
+	if lastLoginAt.Valid {
+		user.LastLoginAt = &lastLoginAt.Time
+	}
+	
+	return &user, nil
+}
+
 func (s *AuthService) SwitchUser(oldSessionID string, newUserID int64) error {
 	var oldUserID int64
 	config.DB.QueryRow("SELECT user_id FROM sessions_tab WHERE id = ?", oldSessionID).Scan(&oldUserID)

@@ -12,6 +12,7 @@ export const ImageGenerationPage: React.FC = () => {
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gemini');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleCopywritingSelect = (task: any) => {
     try {
@@ -78,6 +79,37 @@ export const ImageGenerationPage: React.FC = () => {
   const removeImage = (index: number) => {
     setUploadedImages(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGenerateImages = async () => {
+    if (!sku && !keywords && !sellingPoints) {
+      alert('请至少填写SKU、关键词或产品卖点');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      // TODO: 实现图片生成API调用
+      // const response = await apiClient.generateImages({
+      //   sku,
+      //   keywords,
+      //   sellingPoints,
+      //   competitorLink,
+      //   model: selectedModel,
+      //   images: uploadedImages,
+      // });
+      
+      alert('图片生成功能开发中...\n' + 
+        `SKU: ${sku}\n` +
+        `关键词: ${keywords}\n` +
+        `模型: ${selectedModel}\n` +
+        `图片数量: ${uploadedImages.length}`
+      );
+    } catch (error: any) {
+      alert('生成失败: ' + error.message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -253,10 +285,21 @@ export const ImageGenerationPage: React.FC = () => {
             </div>
 
             <button 
-              className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg"
+              onClick={handleGenerateImages}
+              disabled={isGenerating}
+              className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              开始生成图片
-              <Sparkles size={20} />
+              {isGenerating ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  正在生成中...
+                </>
+              ) : (
+                <>
+                  开始生成图片
+                  <Sparkles size={20} />
+                </>
+              )}
             </button>
           </div>
         </div>
