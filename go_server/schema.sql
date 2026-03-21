@@ -105,7 +105,23 @@ CREATE TABLE IF NOT EXISTS sessions_tab (
     INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户会话表';
 
--- 任务表（图片生成任务）
+-- 邮箱验证码表
+CREATE TABLE IF NOT EXISTS email_verification_codes_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(256) NOT NULL COMMENT '邮箱地址',
+    code VARCHAR(6) NOT NULL COMMENT '6位验证码',
+    purpose VARCHAR(32) NOT NULL COMMENT 'register:注册, reset:重置密码',
+    expires_at TIMESTAMP NOT NULL COMMENT '过期时间',
+    used TINYINT DEFAULT 0 COMMENT '0:未使用, 1:已使用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email (email),
+    INDEX idx_code (code),
+    INDEX idx_expires_at (expires_at),
+    INDEX idx_purpose (purpose)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邮箱验证码表';
+
+-- 任务表（图片生成任务）- 已废弃，请使用 unified_tasks_tab
+-- 保留此表定义用于向后兼容，新项目请直接使用 unified_tasks_tab
 CREATE TABLE IF NOT EXISTS tasks_tab (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -125,7 +141,70 @@ CREATE TABLE IF NOT EXISTS tasks_tab (
     INDEX idx_status (status),
     INDEX idx_created_at (created_at),
     INDEX idx_copywriting_task_id (copywriting_task_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图片生成任务表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图片生成任务表(已废弃)';
+
+-- 文案生成任务表 - 已废弃，请使用 unified_tasks_tab
+-- 保留此表定义用于向后兼容，新项目请直接使用 unified_tasks_tab
+CREATE TABLE IF NOT EXISTS copywriting_tasks_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    task_name VARCHAR(256) COMMENT '任务名称',
+    competitor_urls TEXT COMMENT '竞品链接JSON数组',
+    analysis_result TEXT COMMENT '竞品分析结果JSON',
+    product_details TEXT COMMENT '产品详情JSON',
+    generated_copy TEXT COMMENT '生成的文案JSON',
+    status TINYINT DEFAULT 0 COMMENT '0:分析中, 1:分析完成, 2:生成中, 3:已完成, 10:分析失败, 11:生成失败',
+    analyze_model VARCHAR(32) DEFAULT 'gemini' COMMENT '分析使用的模型',
+    generate_model VARCHAR(32) DEFAULT 'gemini' COMMENT '生成使用的模型',
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    INDEX idx_task_name (task_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文案生成任务表(已废弃)';
+
+-- ============================================
+-- 统一任务表（推荐使用）
+-- 合并了文案生成任务和图片生成任务，提供统一的任务管理接口
+-- ============================================
+CREATE TABLE IF NOT EXISTS unified_tasks_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT '创建者用户ID',
+    username VARCHAR(128) COMMENT '创建者用户名（冗余字段，便于查询）',
+    
+    -- 任务基本信息
+    task_name VARCHAR(256) COMMENT '任务名称',
+    task_type VARCHAR(32) NOT NULL COMMENT '任务类型: copywriting(文案生成), image(图片生成)',
+    status TINYINT DEFAULT 0 COMMENT '0:分析中, 1:分析完成/待生成, 2:生成中, 3:已完成, 10:分析失败, 11:生成失败',
+    
+    -- 任务配置信息（JSON格式，根据不同任务类型存储不同的配置）
+    task_config TEXT COMMENT '任务配置JSON：竞品链接、SKU、关键词等',
+    
+    -- 任务结果数据
+    analysis_result TEXT COMMENT '分析结果JSON',
+    generation_result TEXT COMMENT '生成结果JSON',
+    
+    -- 模型信息
+    analyze_model VARCHAR(32) DEFAULT 'gemini' COMMENT '分析使用的AI模型',
+    generate_model VARCHAR(32) DEFAULT 'gemini' COMMENT '生成使用的AI模型',
+    
+    -- 错误信息
+    error_message TEXT COMMENT '错误信息',
+    
+    -- 时间戳
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    
+    -- 索引
+    INDEX idx_user_id (user_id),
+    INDEX idx_username (username),
+    INDEX idx_task_type (task_type),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    INDEX idx_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='统一任务表';
 
 -- 任务历史表
 -- 字段说明：
@@ -175,24 +254,3 @@ CREATE TABLE IF NOT EXISTS cdn_images_tab (
     INDEX idx_cdn_key (cdn_key),
     INDEX idx_image_type (image_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='CDN图片记录表';
-
--- 文案生成任务表
-CREATE TABLE IF NOT EXISTS copywriting_tasks_tab (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    task_name VARCHAR(256) COMMENT '任务名称',
-    competitor_urls TEXT COMMENT '竞品链接JSON数组',
-    analysis_result TEXT COMMENT '竞品分析结果JSON',
-    product_details TEXT COMMENT '产品详情JSON',
-    generated_copy TEXT COMMENT '生成的文案JSON',
-    status TINYINT DEFAULT 0 COMMENT '0:分析中, 1:分析完成, 2:生成中, 3:已完成, 10:分析失败, 11:生成失败',
-    analyze_model VARCHAR(32) DEFAULT 'gemini' COMMENT '分析使用的模型',
-    generate_model VARCHAR(32) DEFAULT 'gemini' COMMENT '生成使用的模型',
-    error_message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_user_id (user_id),
-    INDEX idx_status (status),
-    INDEX idx_created_at (created_at),
-    INDEX idx_task_name (task_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文案生成任务表';
