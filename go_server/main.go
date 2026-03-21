@@ -65,6 +65,11 @@ func main() {
 	copywritingService := services.NewCopywritingService(multiModelService)
 	rbacService := services.NewRBACService()
 	unifiedTaskService := services.NewUnifiedTaskService()
+	
+	// 新任务中心相关服务
+	taskCenterService := services.NewTaskCenterService()
+	copywritingTaskService := services.NewCopywritingTaskService()
+	// imageTaskService := services.NewImageTaskService() // TODO: 图片生成也需要迁移
 
 	// Initialize RBAC
 	if err := rbacService.InitializeDefaultRolesAndPermissions(); err != nil {
@@ -94,7 +99,7 @@ func main() {
 	modelDomain := domain.NewModelDomain(multiModelService)
 	modelDomain.RegisterRoutes(authMiddleware)
 
-	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService, unifiedTaskService)
+	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService, unifiedTaskService, taskCenterService, copywritingTaskService)
 	copywritingDomain.RegisterRoutes(authMiddleware)
 
 	// 统一任务管理

@@ -9,21 +9,37 @@ import (
 )
 
 type CopywritingDomain struct {
-	copywritingService *services.CopywritingService
-	authService        *services.AuthService
-	unifiedTaskService *services.UnifiedTaskService
+	copywritingService     *services.CopywritingService
+	authService            *services.AuthService
+	unifiedTaskService     *services.UnifiedTaskService
+	taskCenterService      *services.TaskCenterService
+	copywritingTaskService *services.CopywritingTaskService
 }
 
-func NewCopywritingDomain(copywritingService *services.CopywritingService, authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService) *CopywritingDomain {
+func NewCopywritingDomain(
+	copywritingService *services.CopywritingService,
+	authService *services.AuthService,
+	unifiedTaskService *services.UnifiedTaskService,
+	taskCenterService *services.TaskCenterService,
+	copywritingTaskService *services.CopywritingTaskService,
+) *CopywritingDomain {
 	return &CopywritingDomain{
-		copywritingService: copywritingService,
-		authService:        authService,
-		unifiedTaskService: unifiedTaskService,
+		copywritingService:     copywritingService,
+		authService:            authService,
+		unifiedTaskService:     unifiedTaskService,
+		taskCenterService:      taskCenterService,
+		copywritingTaskService: copywritingTaskService,
 	}
 }
 
 func (d *CopywritingDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddleware) {
-	copywritingHandler := handlers.NewCopywritingHandler(d.copywritingService, d.authService, d.unifiedTaskService)
+	copywritingHandler := handlers.NewCopywritingHandler(
+		d.copywritingService,
+		d.authService,
+		d.unifiedTaskService,
+		d.taskCenterService,
+		d.copywritingTaskService,
+	)
 
 	http.HandleFunc("/api/copywriting/analyze", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.AnalyzeCompetitors))))
 	http.HandleFunc("/api/copywriting/generate", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(copywritingHandler.GenerateCopy))))

@@ -15,16 +15,26 @@ import (
 )
 
 type CopywritingHandler struct {
-	copywritingService *services.CopywritingService
-	authService        *services.AuthService
-	unifiedTaskService *services.UnifiedTaskService
+	copywritingService     *services.CopywritingService
+	authService            *services.AuthService
+	unifiedTaskService     *services.UnifiedTaskService
+	taskCenterService      *services.TaskCenterService
+	copywritingTaskService *services.CopywritingTaskService
 }
 
-func NewCopywritingHandler(copywritingService *services.CopywritingService, authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService) *CopywritingHandler {
+func NewCopywritingHandler(
+	copywritingService *services.CopywritingService,
+	authService *services.AuthService,
+	unifiedTaskService *services.UnifiedTaskService,
+	taskCenterService *services.TaskCenterService,
+	copywritingTaskService *services.CopywritingTaskService,
+) *CopywritingHandler {
 	return &CopywritingHandler{
-		copywritingService: copywritingService,
-		authService:        authService,
-		unifiedTaskService: unifiedTaskService,
+		copywritingService:     copywritingService,
+		authService:            authService,
+		unifiedTaskService:     unifiedTaskService,
+		taskCenterService:      taskCenterService,
+		copywritingTaskService: copywritingTaskService,
 	}
 }
 
@@ -67,72 +77,62 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 		req.TaskName = fmt.Sprintf("文案任务_%d", time.Now().Unix())
 	}
 
-	// 获取用户名
-	username := r.Header.Get("X-Username")
-	if username == "" {
-		user, err := h.authService.GetUserByID(userID)
-		if err == nil && user != nil {
-			username = user.Username
-		}
-	}
-
-	// 创建旧格式任务（保持向后兼容）
-	taskID, err := h.copywritingService.CreateTask(userID, req.URLs, req.Model, req.TaskName)
+	// 获取用户邮箱
+	user, err := h.authService.GetUserByID(userID)
 	if err != nil {
+		utils.RespondError(w, fmt.Errorf("failed to get user info"), http.StatusInternalServerError)
+		return
+	}
+	operator := user.Email
+
+	// 1. 生成全局唯一task_id
+	taskID := h.taskCenterService.GenerateTaskID(models.TaskTypeCopywriting)
+	
+	// 2. 创建任务中心底表记录
+	if err := h.taskCenterService.CreateBaseTask(taskID, models.TaskTypeCopywriting, operator); err != nil {
+		log.Printf("Failed to create base task: %v", err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
+	
+	// 3. 创建文案任务详细表记录
+	urlsJSON, _ := json.Marshal(req.URLs)
+	if err := h.copywritingTaskService.CreateTask(taskID, string(urlsJSON), req.Model); err != nil {
+		log.Printf("Failed to create copywriting task: %v", err)
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+	
+	log.Printf("Created copywriting task: task_id=%s, operator=%s", taskID, operator)
 
-	// 创建统一任务
-	configJSON, _ := json.Marshal(map[string]interface{}{
-		"urls": req.URLs,
-	})
-	unifiedTask := &models.UnifiedTask{
-		UserID:        userID,
-		Username:      username,
-		TaskName:      req.TaskName,
-		TaskType:      "copywriting",
-		Status:        0, // 分析中
-		TaskConfig:    string(configJSON),
-		AnalyzeModel:  req.Model,
-		GenerateModel: req.Model,
-	}
-	unifiedTaskID, err := h.unifiedTaskService.CreateTask(unifiedTask)
-	if err != nil {
-		log.Printf("Failed to create unified task: %v", err)
-		// 不影响主流程，继续执行
-	} else {
-		log.Printf("Created unified task: id=%d, type=copywriting, name=%s", unifiedTaskID, req.TaskName)
-	}
+	// 4. 更新状态为进行中
+	h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusOngoing)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	// 5. 执行分析
 	analysis, err := h.copywritingService.AnalyzeCompetitors(ctx, req.URLs, req.Model)
 	if err != nil {
-		h.copywritingService.UpdateTaskStatus(taskID, models.CopyStatusAnalyzeFailed, err.Error())
-		if unifiedTaskID > 0 {
-			h.unifiedTaskService.UpdateTaskStatus(unifiedTaskID, 10, err.Error()) // 分析失败
-		}
+		h.copywritingTaskService.SaveError(taskID, err.Error())
+		h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.copywritingService.SaveAnalysisResult(taskID, analysis); err != nil {
+	// 6. 保存分析结果
+	analysisJSON, _ := json.Marshal(analysis)
+	if err := h.copywritingTaskService.SaveAnalysisResult(taskID, string(analysisJSON)); err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	// 更新统一任务状态为分析完成
-	if unifiedTaskID > 0 {
-		analysisJSON, _ := json.Marshal(analysis)
-		h.unifiedTaskService.UpdateTaskResult(unifiedTaskID, string(analysisJSON), "", 1) // 分析完成
-	}
+	// 7. 保持状态为ongoing，等待用户选择数据并生成文案
+	// 状态会在GenerateCopy时更新为completed
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    analysis,
 		"task_id": taskID,
-		"unified_task_id": unifiedTaskID,
 	})
 }
 
@@ -143,7 +143,7 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 	}
 
 	var req struct {
-		TaskID                    int64                      `json:"task_id"`
+		TaskID                    string                     `json:"task_id"` // 改为string类型
 		SelectedKeywords          []string                   `json:"selectedKeywords"`
 		SelectedSellingPoints     []string                   `json:"selectedSellingPoints"`
 		SelectedReviewInsights    []string                   `json:"selectedReviewInsights"`
@@ -157,7 +157,7 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if req.TaskID == 0 {
+	if req.TaskID == "" {
 		utils.RespondError(w, fmt.Errorf("task_id is required"), http.StatusBadRequest)
 		return
 	}
@@ -166,11 +166,24 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 		req.Model = models.ModelGemini
 	}
 
-	h.copywritingService.UpdateTaskStatus(req.TaskID, models.CopyStatusGenerating, "")
-
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	// 1. 保存用户选择的数据
+	userSelectedJSON, _ := json.Marshal(map[string]interface{}{
+		"selectedKeywords":       req.SelectedKeywords,
+		"selectedSellingPoints":  req.SelectedSellingPoints,
+		"selectedReviewInsights": req.SelectedReviewInsights,
+		"selectedImageInsights":  req.SelectedImageInsights,
+	})
+	productDetailsJSON, _ := json.Marshal(req.ProductDetails)
+	
+	if err := h.copywritingTaskService.SaveUserSelectedData(req.TaskID, string(userSelectedJSON), string(productDetailsJSON)); err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	// 2. 生成文案
 	copyReq := models.GenerateCopyRequest{
 		SelectedKeywords:       req.SelectedKeywords,
 		SelectedSellingPoints:  req.SelectedSellingPoints,
@@ -182,15 +195,21 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 
 	copy, err := h.copywritingService.GenerateCopy(ctx, copyReq)
 	if err != nil {
-		h.copywritingService.UpdateTaskStatus(req.TaskID, models.CopyStatusGenerateFailed, err.Error())
+		h.copywritingTaskService.SaveError(req.TaskID, err.Error())
+		h.taskCenterService.UpdateTaskStatus(req.TaskID, models.TaskStatusFailed)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	if err := h.copywritingService.SaveGeneratedCopy(req.TaskID, copy, &req.ProductDetails); err != nil {
+	// 3. 保存生成的文案
+	copyJSON, _ := json.Marshal(copy)
+	if err := h.copywritingTaskService.SaveGeneratedCopy(req.TaskID, string(copyJSON), req.Model); err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	// 4. 更新任务状态为已完成
+	h.taskCenterService.UpdateTaskStatus(req.TaskID, models.TaskStatusCompleted)
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    copy,
