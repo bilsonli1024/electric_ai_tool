@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Tag, Hash, Sparkles, Loader2 } from 'lucide-react';
 import { CopywritingSelector } from './CopywritingSelector';
+import { apiClient } from '../services/api';
 
 export const ImageGenerationPage: React.FC = () => {
   const [sku, setSku] = useState('');
@@ -35,7 +36,7 @@ export const ImageGenerationPage: React.FC = () => {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+    const files = Array.from(e.target.files || []) as File[];
     processFiles(files);
   };
 
@@ -52,7 +53,7 @@ export const ImageGenerationPage: React.FC = () => {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
+    const files = Array.from(e.dataTransfer.files) as File[];
     processFiles(files);
   };
 
@@ -89,22 +90,27 @@ export const ImageGenerationPage: React.FC = () => {
 
     setIsGenerating(true);
     try {
-      // TODO: 实现图片生成API调用
-      // const response = await apiClient.generateImages({
-      //   sku,
-      //   keywords,
-      //   sellingPoints,
-      //   competitorLink,
-      //   model: selectedModel,
-      //   images: uploadedImages,
-      // });
+      const taskName = `图片生成_${sku || keywords}_${Date.now()}`;
       
-      alert('图片生成功能开发中...\n' + 
-        `SKU: ${sku}\n` +
-        `关键词: ${keywords}\n` +
-        `模型: ${selectedModel}\n` +
-        `图片数量: ${uploadedImages.length}`
-      );
+      const response = await apiClient.generateImages({
+        sku,
+        keywords,
+        sellingPoints,
+        competitorLink,
+        model: selectedModel,
+        taskName,
+        copywritingTaskId: selectedCopywritingTaskId || undefined,
+      });
+      
+      alert(`图片生成任务已创建！\n任务ID: ${response.task_id}\n请到任务中心查看进度`);
+      
+      // 清空表单
+      setSku('');
+      setKeywords('');
+      setSellingPoints('');
+      setCompetitorLink('');
+      setUploadedImages([]);
+      setImagePreviews([]);
     } catch (error: any) {
       alert('生成失败: ' + error.message);
     } finally {

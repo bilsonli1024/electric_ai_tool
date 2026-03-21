@@ -202,6 +202,21 @@ class ApiClient {
     );
   }
 
+  async generateImages(data: {
+    sku: string;
+    keywords: string;
+    sellingPoints: string;
+    competitorLink?: string;
+    model: string;
+    taskName?: string;
+    copywritingTaskId?: number;
+  }): Promise<{ data: any; task_id: number }> {
+    return this.request('/api/tasks/generate-image', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getCopywritingTask(taskId: number): Promise<{ data: any }> {
     return this.request(`/api/copywriting/task?task_id=${taskId}`);
   }

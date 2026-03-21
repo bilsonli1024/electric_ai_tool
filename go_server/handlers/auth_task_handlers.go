@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"electric_ai_tool/go_server/models"
 	"electric_ai_tool/go_server/services"
@@ -309,13 +311,22 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	userID, err := h.getUserID(r)
+	userID, username, err := h.getUserIDAndUsername(r)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusUnauthorized)
 		return
 	}
 
-	var req models.GenerateImageRequest
+	var req struct {
+		SKU                  string `json:"sku"`
+		Keywords             string `json:"keywords"`
+		SellingPoints        string `json:"sellingPoints"`
+		CompetitorLink       string `json:"competitorLink"`
+		Model                string `json:"model"`
+		TaskName             string `json:"taskName"`
+		CopywritingTaskID    int64  `json:"copywritingTaskId"`
+	}
+	
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondError(w, err, http.StatusBadRequest)
 		return
@@ -325,73 +336,131 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		req.Model = models.ModelGemini
 	}
 
-	task, err := h.taskService.CreateTask(userID, "", "", req.Prompt, "", models.ModelGemini, req.Model)
+	if req.TaskName == "" {
+		req.TaskName = fmt.Sprintf("图片生成_%d", time.Now().Unix())
+	}
+
+	// 创建旧格式的任务（保持向后兼容）
+	task, err := h.taskService.CreateTask(userID, req.SKU, req.Keywords, req.SellingPoints, req.CompetitorLink, req.Model, req.Model)
 	if err != nil {
+		log.Printf("Failed to create legacy task: %v", err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerating, nil, "")
+	log.Printf("Created image generation task: id=%d, sku=%s, keywords=%s, user=%s", task.ID, req.SKU, req.Keywords, username)
 
-	productImageURLs, err := h.taskHistoryService.SaveProductImagesToCDN(userID, req.ProductImages, h.cdnService)
-	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
+	// 响应客户端任务已创建
+	utils.RespondJSON(w, map[string]interface{}{
+		"task_id": task.ID,
+		"message": "图片生成任务已创建，正在处理中",
+	})
 
-	var styleRefURL string
-	if req.StyleRefImage != "" {
-		cdnImage, err := h.cdnService.UploadImage(userID, req.StyleRefImage, "style_ref")
+	// 异步处理图片生成（避免阻塞HTTP响应）
+	go func() {
+		ctx := context.Background()
+		
+		// 更新状态为生成中
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerating, nil, "")
+
+		// 构建AI生成提示词
+		prompt := h.buildImageGenerationPrompt(req.SKU, req.Keywords, req.SellingPoints)
+		
+		// 调用AI模型生成图片
+		imageReq := models.GenerateImageRequest{
+			Prompt:      prompt,
+			AspectRatio: "1:1",
+			Model:       req.Model,
+		}
+		
+		generatedDataURL, err := h.multiModelService.GenerateImage(ctx, imageReq)
 		if err != nil {
+			log.Printf("Image generation failed for task %d: %v", task.ID, err)
 			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
-			utils.RespondError(w, err, http.StatusInternalServerError)
 			return
 		}
-		styleRefURL = cdnImage.CDNURL
+
+		// 保存生成的图片到CDN
+		generatedCDNURL, err := h.taskHistoryService.SaveGeneratedImageToCDN(userID, generatedDataURL, h.cdnService)
+		if err != nil {
+			log.Printf("Failed to save generated image to CDN for task %d: %v", task.ID, err)
+			h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
+			return
+		}
+
+		// 创建任务历史记录
+		history := &models.TaskHistory{
+			TaskID:            task.ID,
+			UserID:            userID,
+			Model:             req.Model,
+			Prompt:            prompt,
+			AspectRatio:       "1:1",
+			GeneratedImageURL: generatedCDNURL,
+			Status:            models.TaskHistoryStatusSuccess,
+		}
+
+		if err := h.taskHistoryService.CreateHistory(history); err != nil {
+			log.Printf("Failed to create task history for task %d: %v", task.ID, err)
+		}
+
+		// 更新任务状态为完成
+		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, map[string]interface{}{
+			"generated_image_url": generatedCDNURL,
+		}, "")
+
+		log.Printf("Image generation completed for task %d, image URL: %s", task.ID, generatedCDNURL)
+	}()
+}
+
+// buildImageGenerationPrompt 构建图片生成提示词
+func (h *TaskHandler) buildImageGenerationPrompt(sku, keywords, sellingPoints string) string {
+	prompt := "Create a professional product image for Amazon listing.\n"
+	
+	if sku != "" {
+		prompt += fmt.Sprintf("Product SKU: %s\n", sku)
+	}
+	
+	if keywords != "" {
+		prompt += fmt.Sprintf("Keywords: %s\n", keywords)
+	}
+	
+	if sellingPoints != "" {
+		prompt += fmt.Sprintf("Product Features: %s\n", sellingPoints)
+	}
+	
+	prompt += "\nRequirements:\n"
+	prompt += "- High quality, professional photography style\n"
+	prompt += "- Clean white background\n"
+	prompt += "- Product should be centered and well-lit\n"
+	prompt += "- Show product details clearly\n"
+	prompt += "- Suitable for e-commerce listing\n"
+	
+	return prompt
+}
+
+// getUserIDAndUsername 获取用户ID和用户名
+func (h *TaskHandler) getUserIDAndUsername(r *http.Request) (int64, string, error) {
+	userIDValue := r.Context().Value("user_id")
+	if userIDValue == nil {
+		return 0, "", fmt.Errorf("user_id not found in context")
 	}
 
-	ctx := context.Background()
-	generatedDataURL, err := h.multiModelService.GenerateImage(ctx, req)
-	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		return 0, "", fmt.Errorf("invalid user_id type")
 	}
 
-	generatedCDNURL, err := h.taskHistoryService.SaveGeneratedImageToCDN(userID, generatedDataURL, h.cdnService)
-	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
+	// 从header获取用户名
+	username := r.Header.Get("X-Username")
+	if username == "" {
+		// 如果header中没有，从数据库查询
+		user, err := h.authService.GetUserByID(userID)
+		if err == nil && user != nil {
+			username = user.Username
+		}
 	}
 
-	history := &models.TaskHistory{
-		TaskID:            task.ID,
-		UserID:            userID,
-		Model:             req.Model,
-		Prompt:            req.Prompt,
-		AspectRatio:       req.AspectRatio,
-		ProductImagesURLs: h.taskHistoryService.ConvertURLsToJSON(productImageURLs),
-		StyleRefImageURL:  styleRefURL,
-		GeneratedImageURL: generatedCDNURL,
-		Status:            models.TaskHistoryStatusSuccess,
-	}
-
-	if err := h.taskHistoryService.CreateHistory(history); err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusGenerateFailed, nil, err.Error())
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	h.taskService.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, map[string]interface{}{
-		"generated_image_url": generatedCDNURL,
-	}, "")
-
-	utils.RespondJSON(w, map[string]interface{}{
-		"data":    generatedCDNURL,
-		"task_id": task.ID,
-	})
+	return userID, username, nil
 }
 
 func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {

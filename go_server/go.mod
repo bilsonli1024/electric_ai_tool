@@ -2,6 +2,8 @@ module electric_ai_tool/go_server
 
 go 1.24
 
+toolchain go1.24.0
+
 require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/joho/godotenv v1.5.1
