@@ -47,6 +47,7 @@ type TaskCenterDetail struct {
 type CopywritingTaskDetail struct {
 	ID                 int64     `json:"id"`
 	TaskID             string    `json:"task_id"`
+	TaskName           string    `json:"task_name"`           // 任务名称
 	CompetitorURLs     string    `json:"competitor_urls"`      // JSON数组
 	AnalysisResult     string    `json:"analysis_result"`      // AI初始分析结果
 	AnalyzeModel       string    `json:"analyze_model"`

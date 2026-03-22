@@ -389,13 +389,27 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 
 	// 5. 异步处理图片生成
 	go func() {
+		// 添加panic恢复
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Panic in image generation goroutine for task %s: %v", taskID, r)
+				h.imageTaskService.SaveError(taskID, fmt.Sprintf("Internal error: %v", r))
+				h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
+			}
+		}()
+		
 		ctx := context.Background()
 		
+		log.Printf("Starting image generation for task %s", taskID)
+		
 		// 更新状态为进行中
-		h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusOngoing)
+		if err := h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusOngoing); err != nil {
+			log.Printf("Failed to update status to ongoing for task %s: %v", taskID, err)
+		}
 
 		// 构建AI生成提示词
 		prompt := h.buildImageGenerationPrompt(req.SKU, req.Keywords, req.SellingPoints)
+		log.Printf("Generated prompt for task %s: %s", taskID, prompt)
 		
 		// 调用AI模型生成图片
 		imageReq := models.GenerateImageRequest{
@@ -404,6 +418,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 			Model:       req.Model,
 		}
 		
+		log.Printf("Calling AI service to generate image for task %s with model %s", taskID, req.Model)
 		generatedDataURL, err := h.multiModelService.GenerateImage(ctx, imageReq)
 		if err != nil {
 			log.Printf("Image generation failed for task %s: %v", taskID, err)
@@ -412,7 +427,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		log.Printf("Image generated successfully for task %s", taskID)
+		log.Printf("Image generated successfully for task %s, URL length: %d", taskID, len(generatedDataURL))
 
 		// 保存结果
 		resultData := map[string]interface{}{
@@ -421,6 +436,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		}
 		resultJSON, _ := json.Marshal(resultData)
 		
+		log.Printf("Saving result data for task %s", taskID)
 		if err := h.imageTaskService.SaveResultData(taskID, string(resultJSON), generatedDataURL); err != nil {
 			log.Printf("Failed to save result for task %s: %v", taskID, err)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
@@ -428,7 +444,9 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		}
 		
 		// 更新状态为已完成
-		h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusCompleted)
+		if err := h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusCompleted); err != nil {
+			log.Printf("Failed to update status to completed for task %s: %v", taskID, err)
+		}
 		log.Printf("Task %s completed successfully", taskID)
 	}()
 }

@@ -215,10 +215,9 @@ func (s *TaskCenterService) getCopywritingDetail(taskID string) (*models.Copywri
 	`
 	
 	var detail models.CopywritingTaskDetail
-	var taskName string // 临时变量，因为model中还没有TaskName字段
-	
+
 	err := config.DB.QueryRow(query, taskID).Scan(
-		&detail.ID, &detail.TaskID, &taskName,
+		&detail.ID, &detail.TaskID, &detail.TaskName,
 		&detail.CompetitorURLs, &detail.AnalysisResult,
 		&detail.AnalyzeModel, &detail.UserSelectedData, &detail.ProductDetails,
 		&detail.GeneratedCopy, &detail.GenerateModel, &detail.ErrorMessage,
@@ -268,3 +267,31 @@ func (s *TaskCenterService) getImageDetail(taskID string) (*models.ImageTaskDeta
 	
 	return &detail, nil
 }
+
+// CopyCopywritingTask 复制文案生成任务（只复制输入参数，清空结果）
+func (s *TaskCenterService) CopyCopywritingTask(newTaskID string, originalTask *models.CopywritingTaskDetail) error {
+	query := `
+		INSERT INTO copywriting_tasks_tab (
+			task_id, task_name, competitor_urls
+		) VALUES (?, ?, ?)
+	`
+	
+	_, err := config.DB.Exec(query, newTaskID, originalTask.TaskName, originalTask.CompetitorURLs)
+	return err
+}
+
+// CopyImageTask 复制图片生成任务（只复制输入参数，清空结果）
+func (s *TaskCenterService) CopyImageTask(newTaskID string, originalTask *models.ImageTaskDetail) error {
+	query := `
+		INSERT INTO tasks_tab (
+			task_id, sku, keywords, selling_points, competitor_link,
+			copywriting_task_id, generate_model, aspect_ratio
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	
+	_, err := config.DB.Exec(query, newTaskID, originalTask.SKU, originalTask.Keywords,
+		originalTask.SellingPoints, originalTask.CompetitorLink, originalTask.CopywritingTaskID,
+		originalTask.GenerateModel, originalTask.AspectRatio)
+	return err
+}
+

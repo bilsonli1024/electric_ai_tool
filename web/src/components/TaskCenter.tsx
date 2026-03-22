@@ -41,6 +41,33 @@ export const TaskCenter: React.FC = () => {
     return date.toLocaleString('zh-CN');
   };
 
+  const handleCopyTask = async (task: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!window.confirm('确定要复制这个任务吗？将创建一个包含原任务参数的新任务。')) {
+      return;
+    }
+    
+    try {
+      const taskId = task.task_id || task.id;
+      const response = await apiClient.copyTask(taskId);
+      alert(`任务复制成功！新任务ID: ${response.task_id}`);
+      
+      // 刷新任务列表
+      loadTasks();
+      
+      // 跳转到新任务
+      const taskType = task.task_type || task.type;
+      if (taskType === 'copywriting') {
+        navigate(`/copywriting?task_id=${response.task_id}`);
+      } else if (taskType === 'image') {
+        navigate(`/image-generation?task_id=${response.task_id}`);
+      }
+    } catch (error: any) {
+      alert('复制失败: ' + error.message);
+    }
+  };
+
   // 查看任务详情
   const handleViewDetail = (task: any) => {
     const taskType = task.task_type || task.type;
@@ -402,9 +429,15 @@ export const TaskCenter: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button
                         onClick={() => handleViewDetail(task)}
-                        className="text-indigo-600 hover:text-indigo-900"
+                        className="text-indigo-600 hover:text-indigo-900 mr-4"
                       >
                         查看详情
+                      </button>
+                      <button
+                        onClick={(e) => handleCopyTask(task, e)}
+                        className="text-green-600 hover:text-green-900"
+                      >
+                        复制
                       </button>
                     </td>
                   </tr>

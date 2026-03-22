@@ -1,21 +1,121 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Tag, Hash, Sparkles, Loader2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { CopywritingSelector } from './CopywritingSelector';
 import { apiClient } from '../services/api';
 import { Toast, ToastType } from './Toast';
 
 export const ImageGenerationPage: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  
   const [sku, setSku] = useState('');
   const [keywords, setKeywords] = useState('');
   const [sellingPoints, setSellingPoints] = useState('');
   const [competitorLink, setCompetitorLink] = useState('');
-  const [selectedCopywritingTaskId, setSelectedCopywritingTaskId] = useState<number | null>(null);
+  const [selectedCopywritingTaskId, setSelectedCopywritingTaskId] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [selectedModel, setSelectedModel] = useState('gemini');
   const [isGenerating, setIsGenerating] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<string>('');
+  const [generatedImageUrls, setGeneratedImageUrls] = useState<string[]>([]);
+  const [isLoadingTask, setIsLoadingTask] = useState(false);
+
+  // 从URL加载任务
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const taskIdFromUrl = params.get('task_id');
+    
+    if (taskIdFromUrl) {
+      loadTaskDetail(taskIdFromUrl);
+    }
+  }, [location.search]);
+
+  // 轮询任务状态
+  useEffect(() => {
+    if (!currentTaskId || taskStatus === 'completed' || taskStatus === 'failed') {
+      return;
+    }
+
+    const pollInterval = setInterval(() => {
+      pollTaskStatus(currentTaskId);
+    }, 3000); // 每3秒轮询一次
+
+    return () => clearInterval(pollInterval);
+  }, [currentTaskId, taskStatus]);
+
+  const loadTaskDetail = async (taskId: string) => {
+    setIsLoadingTask(true);
+    try {
+      const response = await apiClient.getTaskCenterDetail(taskId);
+      const detail = response.data;
+      
+      if (detail.task_type !== 'image') {
+        setToast({ message: '任务类型不匹配', type: 'error' });
+        return;
+      }
+
+      const imageDetail = detail.detail_data as any;
+      
+      // 恢复表单数据
+      setSku(imageDetail.sku || '');
+      setKeywords(imageDetail.keywords || '');
+      setSellingPoints(imageDetail.selling_points || '');
+      setCompetitorLink(imageDetail.competitor_link || '');
+      setSelectedModel(imageDetail.generate_model || 'gemini');
+      setSelectedCopywritingTaskId(imageDetail.copywriting_task_id || null);
+      
+      // 设置任务状态
+      setCurrentTaskId(taskId);
+      setTaskStatus(detail.task_status);
+      
+      // 如果已完成，显示结果
+      if (detail.task_status === 'completed' && imageDetail.generated_image_urls) {
+        const urls = imageDetail.generated_image_urls.split(',').filter((url: string) => url.trim());
+        setGeneratedImageUrls(urls);
+      }
+      
+      // 如果正在生成，开始轮询
+      if (detail.task_status === 'ongoing') {
+        setIsGenerating(true);
+      }
+      
+    } catch (error: any) {
+      setToast({ message: '加载任务失败: ' + error.message, type: 'error' });
+    } finally {
+      setIsLoadingTask(false);
+    }
+  };
+
+  const pollTaskStatus = async (taskId: string) => {
+    try {
+      const response = await apiClient.getTaskCenterDetail(taskId);
+      const detail = response.data;
+      const imageDetail = detail.detail_data as any;
+      
+      setTaskStatus(detail.task_status);
+      
+      if (detail.task_status === 'completed') {
+        setIsGenerating(false);
+        if (imageDetail.generated_image_urls) {
+          const urls = imageDetail.generated_image_urls.split(',').filter((url: string) => url.trim());
+          setGeneratedImageUrls(urls);
+          // 跳转到结果页面
+          navigate(`/image-generation/result?task_id=${taskId}`);
+        }
+        setToast({ message: '图片生成成功！', type: 'success' });
+      } else if (detail.task_status === 'failed') {
+        setIsGenerating(false);
+        setToast({ message: '图片生成失败: ' + (imageDetail.error_message || '未知错误'), type: 'error' });
+      }
+    } catch (error: any) {
+      console.error('Failed to poll task status:', error);
+    }
+  };
 
   const handleCopywritingSelect = (task: any) => {
     try {
@@ -104,8 +204,13 @@ export const ImageGenerationPage: React.FC = () => {
         copywritingTaskId: selectedCopywritingTaskId || undefined,
       });
       
+      // 设置当前任务ID并开始轮询
+      setCurrentTaskId(response.task_id);
+      setTaskStatus('ongoing');
+      setGeneratedImageUrls([]); // 清空之前的结果
+      
       setToast({ 
-        message: `图片生成任务已创建！\n任务ID: ${response.task_id}\n请到任务中心查看进度`, 
+        message: `图片生成任务已创建！任务ID: ${response.task_id}\n正在生成中，请稍候...也可在任务中心查看进度`, 
         type: 'success' 
       });
       
@@ -119,6 +224,15 @@ export const ImageGenerationPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
+      {isLoadingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin text-purple-600" size={48} />
+            <p className="text-lg font-semibold">加载任务中...</p>
+          </div>
+        </div>
+      )}
+      
       {toast && (
         <Toast
           message={toast.message}
@@ -138,9 +252,8 @@ export const ImageGenerationPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Copywriting Selector */}
-          <CopywritingSelector onSelectCopywriting={handleCopywritingSelect} />
+        <div className="lg:col-span-2 space-y-6">{/* CopywritingSelector 只在不是从任务恢复时显示 */}
+          {!currentTaskId && <CopywritingSelector onSelectCopywriting={handleCopywritingSelect} />}
 
           {/* Product Information Form */}
           <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
@@ -299,13 +412,17 @@ export const ImageGenerationPage: React.FC = () => {
 
             <button 
               onClick={handleGenerateImages}
-              disabled={isGenerating}
+              disabled={isGenerating || taskStatus === 'completed'}
               className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGenerating ? (
                 <>
                   <Loader2 className="animate-spin" />
                   正在生成中...
+                </>
+              ) : taskStatus === 'completed' ? (
+                <>
+                  已完成
                 </>
               ) : (
                 <>
@@ -314,6 +431,18 @@ export const ImageGenerationPage: React.FC = () => {
                 </>
               )}
             </button>
+            
+            {taskStatus === 'completed' && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-center">
+                <p className="text-green-800 font-semibold">此任务已完成</p>
+                <button
+                  onClick={() => navigate('/image-generation')}
+                  className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all"
+                >
+                  创建新任务
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

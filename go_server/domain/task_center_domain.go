@@ -37,4 +37,8 @@ func (d *TaskCenterDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddlew
 	// 任务统计
 	http.HandleFunc("/api/task-center/statistics", 
 		middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(handler.GetTaskStatistics))))
+	
+	// 复制任务
+	http.HandleFunc("/api/task-center/copy", 
+		middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(handler.CopyTask))))
 }

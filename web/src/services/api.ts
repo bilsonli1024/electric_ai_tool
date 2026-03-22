@@ -142,6 +142,12 @@ class ApiClient {
     return this.request('/api/task-center/statistics');
   }
 
+  async copyTask(taskId: string): Promise<{ task_id: string; message: string }> {
+    return this.request(`/api/task-center/copy?task_id=${taskId}`, {
+      method: 'POST',
+    });
+  }
+
   // 旧的统一任务API（兼容）
   async getUnifiedTasks(params?: {
     limit?: number;

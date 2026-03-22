@@ -7,6 +7,7 @@ import { UserManagement } from './components/UserManagement';
 import { ModelTest } from './components/ModelTest';
 import { CopywritingGenerator } from './components/CopywritingGenerator';
 import { ImageGenerationPage } from './components/ImageGenerationPage';
+import { ImageGenerationResult } from './components/ImageGenerationResult';
 import { apiClient } from './services/api';
 
 type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest';
@@ -127,6 +128,7 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
           <Routes>
             <Route path="/copywriting" element={<CopywritingGenerator />} />
             <Route path="/image-generation" element={<ImageGenerationPage />} />
+            <Route path="/image-generation/result" element={<ImageGenerationResult />} />
             <Route path="/tasks" element={<TaskCenter />} />
             <Route path="/user" element={<UserManagement />} />
             <Route path="/modeltest" element={<ModelTest />} />

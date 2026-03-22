@@ -212,3 +212,71 @@ func (h *TaskCenterHandler) GetTaskStatistics(w http.ResponseWriter, r *http.Req
 		"data": stats,
 	})
 }
+
+// CopyTask 复制任务
+func (h *TaskCenterHandler) CopyTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	taskID := r.URL.Query().Get("task_id")
+	if taskID == "" {
+		utils.RespondError(w, fmt.Errorf("task_id is required"), http.StatusBadRequest)
+		return
+	}
+
+	// 获取用户信息
+	sessionID := r.Header.Get("Authorization")
+	if sessionID != "" && len(sessionID) > 7 {
+		sessionID = sessionID[7:]
+	}
+
+	user, err := h.authService.ValidateSession(sessionID)
+	if err != nil {
+		utils.RespondError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	// 获取原任务详情
+	detail, err := h.taskCenterService.GetTaskDetail(taskID)
+	if err != nil {
+		log.Printf("CopyTask GetTaskDetail error: %v", err)
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	// 生成新任务ID
+	newTaskID := h.taskCenterService.GenerateTaskID(detail.TaskType)
+
+	// 创建新的任务中心记录
+	if err := h.taskCenterService.CreateBaseTask(newTaskID, detail.TaskType, user.Email); err != nil {
+		log.Printf("CopyTask CreateBaseTask error: %v", err)
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	// 根据任务类型复制详细数据
+	if detail.TaskType == models.TaskTypeCopywriting {
+		copyDetail := detail.DetailData.(*models.CopywritingTaskDetail)
+		if err := h.taskCenterService.CopyCopywritingTask(newTaskID, copyDetail); err != nil {
+			log.Printf("CopyTask CopyCopywritingTask error: %v", err)
+			utils.RespondError(w, err, http.StatusInternalServerError)
+			return
+		}
+	} else if detail.TaskType == models.TaskTypeImage {
+		imageDetail := detail.DetailData.(*models.ImageTaskDetail)
+		if err := h.taskCenterService.CopyImageTask(newTaskID, imageDetail); err != nil {
+			log.Printf("CopyTask CopyImageTask error: %v", err)
+			utils.RespondError(w, err, http.StatusInternalServerError)
+			return
+		}
+	}
+
+	log.Printf("Task copied successfully: %s -> %s", taskID, newTaskID)
+	utils.RespondJSON(w, map[string]interface{}{
+		"task_id": newTaskID,
+		"message": "任务复制成功",
+	})
+}
+
