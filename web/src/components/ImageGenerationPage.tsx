@@ -37,7 +37,8 @@ export const ImageGenerationPage: React.FC = () => {
 
   // 轮询任务状态
   useEffect(() => {
-    if (!currentTaskId || taskStatus === 'completed' || taskStatus === 'failed') {
+    // 只有在生成中才轮询
+    if (!currentTaskId || !isGenerating || taskStatus === 'completed' || taskStatus === 'failed') {
       return;
     }
 
@@ -46,7 +47,7 @@ export const ImageGenerationPage: React.FC = () => {
     }, 3000); // 每3秒轮询一次
 
     return () => clearInterval(pollInterval);
-  }, [currentTaskId, taskStatus]);
+  }, [currentTaskId, isGenerating, taskStatus]);
 
   const loadTaskDetail = async (taskId: string) => {
     setIsLoadingTask(true);

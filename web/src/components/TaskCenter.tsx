@@ -113,57 +113,45 @@ export const TaskCenter: React.FC = () => {
     setPageNo(1);
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    
-    const loadTasks = async () => {
-      setLoading(true);
-      try {
-        // 转换时间筛选为秒级时间戳
-        let startTimestamp: number | undefined;
-        let endTimestamp: number | undefined;
-        
-        if (filterStartTime) {
-          // datetime-local格式：2026-03-22T01:30
-          startTimestamp = Math.floor(new Date(filterStartTime).getTime() / 1000);
-        }
-        if (filterEndTime) {
-          // datetime-local格式：2026-03-22T23:59
-          endTimestamp = Math.floor(new Date(filterEndTime).getTime() / 1000);
-        }
-        
-        // 使用新的任务中心接口
-        const response = await apiClient.getTaskCenterTasks({
-          page_size: pageSize,
-          page_no: pageNo,
-          view_all: viewMode === 'all',
-          operator: filterOperator || undefined,
-          start_time: startTimestamp,
-          end_time: endTimestamp,
-        });
-        
-        if (!cancelled) {
-          setTasks(response?.data || []);
-          setTotal(response?.total || 0);
-        }
-      } catch (err) {
-        console.error('Failed to load tasks:', err);
-        if (!cancelled) {
-          setTasks([]);
-          setTotal(0);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+  const loadTasks = async () => {
+    setLoading(true);
+    try {
+      // 转换时间筛选为秒级时间戳
+      let startTimestamp: number | undefined;
+      let endTimestamp: number | undefined;
+      
+      if (filterStartTime) {
+        // datetime-local格式：2026-03-22T01:30
+        startTimestamp = Math.floor(new Date(filterStartTime).getTime() / 1000);
       }
-    };
-    
+      if (filterEndTime) {
+        // datetime-local格式：2026-03-22T23:59
+        endTimestamp = Math.floor(new Date(filterEndTime).getTime() / 1000);
+      }
+      
+      // 使用新的任务中心接口
+      const response = await apiClient.getTaskCenterTasks({
+        page_size: pageSize,
+        page_no: pageNo,
+        view_all: viewMode === 'all',
+        operator: filterOperator || undefined,
+        start_time: startTimestamp,
+        end_time: endTimestamp,
+      });
+      
+      setTasks(response?.data || []);
+      setTotal(response?.total || 0);
+    } catch (err) {
+      console.error('Failed to load tasks:', err);
+      setTasks([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadTasks();
-    
-    return () => {
-      cancelled = true;
-    };
   }, [pageNo, viewMode, filterOperator, filterStartTime, filterEndTime]);
 
   const getStatusColor = (status: string | number) => {

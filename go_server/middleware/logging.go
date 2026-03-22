@@ -27,7 +27,13 @@ func LoggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		
-		log.Printf("→ [%s] %s %s from %s", r.Method, r.URL.Path, r.Proto, r.RemoteAddr)
+		// 记录请求信息，包括查询参数
+		queryParams := r.URL.Query().Encode()
+		if queryParams != "" {
+			log.Printf("→ [%s] %s?%s from %s", r.Method, r.URL.Path, queryParams, r.RemoteAddr)
+		} else {
+			log.Printf("→ [%s] %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+		}
 		
 		wrapped := &responseWriter{
 			ResponseWriter: w,

@@ -100,6 +100,11 @@ export const CopywritingGenerator: React.FC = () => {
       setTaskId(detail.task_id);
       setSelectedModel(copyDetail.analyze_model || 'gemini');
       
+      // 设置任务名称
+      if (copyDetail.task_name) {
+        setTaskName(copyDetail.task_name);
+      }
+      
       // 解析竞品链接
       if (copyDetail.competitor_urls) {
         try {

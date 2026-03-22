@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -119,11 +120,16 @@ SKU: %s
 		ResponseSchema:   schema,
 	}
 
+	log.Printf("🤖 Gemini API Request - Model: gemini-3.1-flash-lite-preview, Prompt length: %d chars", len(prompt))
+	
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
 	if err != nil {
+		log.Printf("❌ Gemini API Error: %v", err)
 		return nil, err
 	}
 
+	log.Printf("✅ Gemini API Response received - Candidates: %d", len(resp.Candidates))
+	
 	var responseText string
 	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
 		if textPart := resp.Candidates[0].Content.Parts[0].Text; textPart != "" {
@@ -262,12 +268,23 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 		ResponseModalities: []string{"IMAGE", "TEXT"},
 	}
 
+	log.Printf("🖼️  Gemini Image API Request - Model: gemini-3.1-flash-lite-preview, Prompt length: %d chars, Images: %d", 
+		len(enhancedPrompt), len(req.ProductImages))
+	
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
 	if err != nil {
+		log.Printf("❌ Gemini Image API Error: %v", err)
 		return "", err
 	}
 
-	return utils.ExtractImageFromResponse(resp), nil
+	imageURL := utils.ExtractImageFromResponse(resp)
+	if imageURL != "" {
+		log.Printf("✅ Gemini Image API Response - Image generated successfully, data URL length: %d", len(imageURL))
+	} else {
+		log.Printf("⚠️  Gemini Image API Response - No image in response")
+	}
+	
+	return imageURL, nil
 }
 
 func (s *MultiModelService) generateWithGPT(ctx context.Context, req models.GenerateImageRequest) (string, error) {
@@ -339,17 +356,22 @@ func (s *MultiModelService) testChatWithGemini(ctx context.Context, prompt strin
 	parts := []*genai.Part{{Text: prompt}}
 	contents := []*genai.Content{{Parts: parts}}
 
+	log.Printf("💬 Gemini Chat Test - Prompt: %s", prompt)
+	
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, nil)
 	if err != nil {
+		log.Printf("❌ Gemini Chat Test Error: %v", err)
 		return "", err
 	}
 
 	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
 		if textPart := resp.Candidates[0].Content.Parts[0].Text; textPart != "" {
+			log.Printf("✅ Gemini Chat Test Response: %s", textPart)
 			return textPart, nil
 		}
 	}
 
+	log.Printf("⚠️  Gemini Chat Test - No response text")
 	return "", fmt.Errorf("empty response from Gemini")
 }
 
