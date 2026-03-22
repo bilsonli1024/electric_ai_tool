@@ -60,10 +60,10 @@ func (s *LocalStorageService) SaveUploadedImage(data []byte, originalFilename st
 	}
 	
 	// 完整文件路径
-	filepath := filepath.Join(uploadDir, filename)
+	fullPath := filepath.Join(uploadDir, filename)
 	
 	// 写入文件
-	if err := os.WriteFile(filepath, data, 0644); err != nil {
+	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	
@@ -111,10 +111,10 @@ func (s *LocalStorageService) SaveGeneratedImage(dataURL string) (string, error)
 	}
 	
 	// 完整文件路径
-	filepath := filepath.Join(generatedDir, filename)
+	fullPath := filepath.Join(generatedDir, filename)
 	
 	// 写入文件
-	if err := os.WriteFile(filepath, data, 0644); err != nil {
+	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	
