@@ -15,6 +15,8 @@ type TaskDomain struct {
 	cdnService         *services.CDNService
 	authService        *services.AuthService
 	unifiedTaskService *services.UnifiedTaskService
+	taskCenterService  *services.TaskCenterService
+	imageTaskService   *services.ImageTaskService
 }
 
 func NewTaskDomain(
@@ -24,6 +26,8 @@ func NewTaskDomain(
 	cdnService *services.CDNService,
 	authService *services.AuthService,
 	unifiedTaskService *services.UnifiedTaskService,
+	taskCenterService *services.TaskCenterService,
+	imageTaskService *services.ImageTaskService,
 ) *TaskDomain {
 	return &TaskDomain{
 		multiModelService:  multiModelService,
@@ -32,6 +36,8 @@ func NewTaskDomain(
 		cdnService:         cdnService,
 		authService:        authService,
 		unifiedTaskService: unifiedTaskService,
+		taskCenterService:  taskCenterService,
+		imageTaskService:   imageTaskService,
 	}
 }
 
@@ -43,6 +49,8 @@ func (d *TaskDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddleware) {
 		d.cdnService,
 		d.authService,
 		d.unifiedTaskService,
+		d.taskCenterService,
+		d.imageTaskService,
 	)
 
 	http.HandleFunc("/api/tasks/analyze", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(taskHandler.AnalyzeWithTask))))

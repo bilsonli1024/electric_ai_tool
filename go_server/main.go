@@ -69,7 +69,7 @@ func main() {
 	// 新任务中心相关服务
 	taskCenterService := services.NewTaskCenterService()
 	copywritingTaskService := services.NewCopywritingTaskService()
-	// imageTaskService := services.NewImageTaskService() // TODO: 图片生成也需要迁移
+	imageTaskService := services.NewImageTaskService()
 
 	// Initialize RBAC
 	if err := rbacService.InitializeDefaultRolesAndPermissions(); err != nil {
@@ -93,7 +93,7 @@ func main() {
 	authDomain := domain.NewAuthDomain(authService, emailService)
 	authDomain.RegisterRoutes(authMiddleware)
 
-	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService, unifiedTaskService)
+	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService, unifiedTaskService, taskCenterService, imageTaskService)
 	taskDomain.RegisterRoutes(authMiddleware)
 
 	modelDomain := domain.NewModelDomain(multiModelService)

@@ -86,7 +86,8 @@ export const CopywritingGenerator: React.FC = () => {
   const loadTaskDetail = async (taskIdToLoad: string) => {
     setIsLoadingTask(true);
     try {
-      const detail = await apiClient.getTaskCenterDetail(taskIdToLoad);
+      const response = await apiClient.getTaskCenterDetail(taskIdToLoad);
+      const detail = response.data; // 提取data字段
       
       if (detail.task_type !== 'copywriting') {
         alert('任务类型不匹配');

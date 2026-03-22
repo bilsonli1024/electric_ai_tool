@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task } from '../types';
 import { apiClient } from '../services/api';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, User } from 'lucide-react';
+import { Calendar, User, Search } from 'lucide-react';
 
 export const TaskCenter: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -13,7 +13,12 @@ export const TaskCenter: React.FC = () => {
   const pageSize = 20;
   const navigate = useNavigate();
 
-  // 筛选器状态
+  // 临时筛选器状态（用户输入时修改）
+  const [tempFilterOperator, setTempFilterOperator] = useState('');
+  const [tempFilterStartTime, setTempFilterStartTime] = useState('');
+  const [tempFilterEndTime, setTempFilterEndTime] = useState('');
+
+  // 实际筛选器状态（点击搜索后应用）
   const [filterOperator, setFilterOperator] = useState('');
   const [filterStartTime, setFilterStartTime] = useState('');
   const [filterEndTime, setFilterEndTime] = useState('');
@@ -61,6 +66,26 @@ export const TaskCenter: React.FC = () => {
     return task.task_name || task.sku || task.keywords || '-';
   };
 
+  // 点击搜索按钮
+  const handleSearch = () => {
+    // 将临时筛选器应用到实际筛选器
+    setFilterOperator(tempFilterOperator);
+    setFilterStartTime(tempFilterStartTime);
+    setFilterEndTime(tempFilterEndTime);
+    setPageNo(1); // 重置到第一页
+  };
+
+  // 清空筛选
+  const handleClearFilters = () => {
+    setTempFilterOperator('');
+    setTempFilterStartTime('');
+    setTempFilterEndTime('');
+    setFilterOperator('');
+    setFilterStartTime('');
+    setFilterEndTime('');
+    setPageNo(1);
+  };
+
   useEffect(() => {
     let cancelled = false;
     
@@ -72,13 +97,12 @@ export const TaskCenter: React.FC = () => {
         let endTimestamp: number | undefined;
         
         if (filterStartTime) {
+          // datetime-local格式：2026-03-22T01:30
           startTimestamp = Math.floor(new Date(filterStartTime).getTime() / 1000);
         }
         if (filterEndTime) {
-          // 结束时间设为当天的23:59:59
-          const endDate = new Date(filterEndTime);
-          endDate.setHours(23, 59, 59, 999);
-          endTimestamp = Math.floor(endDate.getTime() / 1000);
+          // datetime-local格式：2026-03-22T23:59
+          endTimestamp = Math.floor(new Date(filterEndTime).getTime() / 1000);
         }
         
         // 使用新的任务中心接口
@@ -246,7 +270,7 @@ export const TaskCenter: React.FC = () => {
 
       {/* 筛选器 */}
       <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           {/* 创建者筛选 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -256,11 +280,9 @@ export const TaskCenter: React.FC = () => {
             <input
               type="text"
               placeholder="输入邮箱或用户名"
-              value={filterOperator}
-              onChange={(e) => {
-                setFilterOperator(e.target.value);
-                setPageNo(1);
-              }}
+              value={tempFilterOperator}
+              onChange={(e) => setTempFilterOperator(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
             />
           </div>
@@ -272,12 +294,9 @@ export const TaskCenter: React.FC = () => {
               开始时间
             </label>
             <input
-              type="date"
-              value={filterStartTime}
-              onChange={(e) => {
-                setFilterStartTime(e.target.value);
-                setPageNo(1);
-              }}
+              type="datetime-local"
+              value={tempFilterStartTime}
+              onChange={(e) => setTempFilterStartTime(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
             />
           </div>
@@ -289,33 +308,32 @@ export const TaskCenter: React.FC = () => {
               结束时间
             </label>
             <input
-              type="date"
-              value={filterEndTime}
-              onChange={(e) => {
-                setFilterEndTime(e.target.value);
-                setPageNo(1);
-              }}
+              type="datetime-local"
+              value={tempFilterEndTime}
+              onChange={(e) => setTempFilterEndTime(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
             />
           </div>
         </div>
 
-        {/* 清空筛选器按钮 */}
-        {(filterOperator || filterStartTime || filterEndTime) && (
-          <div className="mt-3 flex justify-end">
+        {/* 搜索和清空按钮 */}
+        <div className="flex justify-end gap-3">
+          {(tempFilterOperator || tempFilterStartTime || tempFilterEndTime) && (
             <button
-              onClick={() => {
-                setFilterOperator('');
-                setFilterStartTime('');
-                setFilterEndTime('');
-                setPageNo(1);
-              }}
+              onClick={handleClearFilters}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
             >
               清空筛选
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={handleSearch}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 font-medium"
+          >
+            <Search size={18} />
+            搜索
+          </button>
+        </div>
       </div>
 
       {loading ? (
