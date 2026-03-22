@@ -65,6 +65,7 @@ func main() {
 	copywritingService := services.NewCopywritingService(multiModelService)
 	rbacService := services.NewRBACService()
 	unifiedTaskService := services.NewUnifiedTaskService()
+	localStorageService := services.NewLocalStorageService()
 	
 	// 新任务中心相关服务
 	taskCenterService := services.NewTaskCenterService()
@@ -83,6 +84,14 @@ func main() {
 	handler := handlers.NewHandler(aiService)
 	http.HandleFunc("/api/health", middleware.LoggingMiddleware(middleware.CORS(handler.Health)))
 
+	// 静态文件服务 - uploads目录
+	uploadsDir := "./uploads"
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		log.Printf("⚠️  Failed to create uploads directory: %v", err)
+	}
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadsDir))))
+	log.Printf("📁 Static file server enabled for /uploads/")
+
 	// Legacy API routes (to be removed later)
 	http.HandleFunc("/api/analyze", middleware.LoggingMiddleware(middleware.CORS(handler.Analyze)))
 	http.HandleFunc("/api/generate-image", middleware.LoggingMiddleware(middleware.CORS(handler.GenerateImage)))
@@ -93,7 +102,7 @@ func main() {
 	authDomain := domain.NewAuthDomain(authService, emailService)
 	authDomain.RegisterRoutes(authMiddleware)
 
-	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService, unifiedTaskService, taskCenterService, imageTaskService)
+	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService, unifiedTaskService, taskCenterService, imageTaskService, localStorageService)
 	taskDomain.RegisterRoutes(authMiddleware)
 
 	modelDomain := domain.NewModelDomain(multiModelService)

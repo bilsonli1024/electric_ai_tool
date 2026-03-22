@@ -226,29 +226,32 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 type TaskHandler struct {
-	multiModelService  *services.MultiModelService
-	taskService        *services.TaskService
-	taskHistoryService *services.TaskHistoryService
-	cdnService         *services.CDNService
-	authService        *services.AuthService
-	unifiedTaskService *services.UnifiedTaskService
-	taskCenterService  *services.TaskCenterService
-	imageTaskService   *services.ImageTaskService
+	multiModelService   *services.MultiModelService
+	taskService         *services.TaskService
+	taskHistoryService  *services.TaskHistoryService
+	cdnService          *services.CDNService
+	authService         *services.AuthService
+	unifiedTaskService  *services.UnifiedTaskService
+	taskCenterService   *services.TaskCenterService
+	imageTaskService    *services.ImageTaskService
+	localStorageService *services.LocalStorageService
 }
 
 func NewTaskHandler(multiModelService *services.MultiModelService, taskService *services.TaskService,
 	taskHistoryService *services.TaskHistoryService, cdnService *services.CDNService,
 	authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService,
-	taskCenterService *services.TaskCenterService, imageTaskService *services.ImageTaskService) *TaskHandler {
+	taskCenterService *services.TaskCenterService, imageTaskService *services.ImageTaskService,
+	localStorageService *services.LocalStorageService) *TaskHandler {
 	return &TaskHandler{
-		multiModelService:  multiModelService,
-		taskService:        taskService,
-		taskHistoryService: taskHistoryService,
-		cdnService:         cdnService,
-		authService:        authService,
-		unifiedTaskService: unifiedTaskService,
-		taskCenterService:  taskCenterService,
-		imageTaskService:   imageTaskService,
+		multiModelService:   multiModelService,
+		taskService:         taskService,
+		taskHistoryService:  taskHistoryService,
+		cdnService:          cdnService,
+		authService:         authService,
+		unifiedTaskService:  unifiedTaskService,
+		taskCenterService:   taskCenterService,
+		imageTaskService:    imageTaskService,
+		localStorageService: localStorageService,
 	}
 }
 
@@ -427,17 +430,32 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		log.Printf("Image generated successfully for task %s, URL length: %d", taskID, len(generatedDataURL))
+		log.Printf("Image generated successfully for task %s, data URL length: %d", taskID, len(generatedDataURL))
 
-		// 保存结果
+		// 保存图片到本地文件
+		localPath, err := h.localStorageService.SaveGeneratedImage(generatedDataURL)
+		if err != nil {
+			log.Printf("Failed to save image to local storage for task %s: %v", taskID, err)
+			h.imageTaskService.SaveError(taskID, fmt.Sprintf("Failed to save image: %v", err))
+			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
+			return
+		}
+		
+		// 生成访问URL
+		imageURL := h.localStorageService.GetFileURL(localPath)
+		log.Printf("Image saved to local storage: %s, access URL: %s", localPath, imageURL)
+
+		// 保存结果（同时保存本地路径和访问URL）
 		resultData := map[string]interface{}{
-			"image_url": generatedDataURL,
-			"prompt":    prompt,
+			"image_url":   imageURL,
+			"local_path":  localPath,
+			"prompt":      prompt,
+			"data_url":    generatedDataURL[:100] + "...", // 只保存前100个字符作为记录
 		}
 		resultJSON, _ := json.Marshal(resultData)
 		
 		log.Printf("Saving result data for task %s", taskID)
-		if err := h.imageTaskService.SaveResultData(taskID, string(resultJSON), generatedDataURL); err != nil {
+		if err := h.imageTaskService.SaveResultData(taskID, string(resultJSON), imageURL); err != nil {
 			log.Printf("Failed to save result for task %s: %v", taskID, err)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 			return

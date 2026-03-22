@@ -9,14 +9,15 @@ import (
 )
 
 type TaskDomain struct {
-	multiModelService  *services.MultiModelService
-	taskService        *services.TaskService
-	taskHistoryService *services.TaskHistoryService
-	cdnService         *services.CDNService
-	authService        *services.AuthService
-	unifiedTaskService *services.UnifiedTaskService
-	taskCenterService  *services.TaskCenterService
-	imageTaskService   *services.ImageTaskService
+	multiModelService   *services.MultiModelService
+	taskService         *services.TaskService
+	taskHistoryService  *services.TaskHistoryService
+	cdnService          *services.CDNService
+	authService         *services.AuthService
+	unifiedTaskService  *services.UnifiedTaskService
+	taskCenterService   *services.TaskCenterService
+	imageTaskService    *services.ImageTaskService
+	localStorageService *services.LocalStorageService
 }
 
 func NewTaskDomain(
@@ -28,16 +29,18 @@ func NewTaskDomain(
 	unifiedTaskService *services.UnifiedTaskService,
 	taskCenterService *services.TaskCenterService,
 	imageTaskService *services.ImageTaskService,
+	localStorageService *services.LocalStorageService,
 ) *TaskDomain {
 	return &TaskDomain{
-		multiModelService:  multiModelService,
-		taskService:        taskService,
-		taskHistoryService: taskHistoryService,
-		cdnService:         cdnService,
-		authService:        authService,
-		unifiedTaskService: unifiedTaskService,
-		taskCenterService:  taskCenterService,
-		imageTaskService:   imageTaskService,
+		multiModelService:   multiModelService,
+		taskService:         taskService,
+		taskHistoryService:  taskHistoryService,
+		cdnService:          cdnService,
+		authService:         authService,
+		unifiedTaskService:  unifiedTaskService,
+		taskCenterService:   taskCenterService,
+		imageTaskService:    imageTaskService,
+		localStorageService: localStorageService,
 	}
 }
 
@@ -51,6 +54,7 @@ func (d *TaskDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddleware) {
 		d.unifiedTaskService,
 		d.taskCenterService,
 		d.imageTaskService,
+		d.localStorageService,
 	)
 
 	http.HandleFunc("/api/tasks/analyze", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(taskHandler.AnalyzeWithTask))))
