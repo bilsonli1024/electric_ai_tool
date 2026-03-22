@@ -342,13 +342,14 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 	}
 
 	var req struct {
-		SKU                  string `json:"sku"`
-		Keywords             string `json:"keywords"`
-		SellingPoints        string `json:"sellingPoints"`
-		CompetitorLink       string `json:"competitorLink"`
-		Model                string `json:"model"`
-		TaskName             string `json:"taskName"`
-		CopywritingTaskID    string `json:"copywritingTaskId"` // 改为string类型的task_id
+		SKU                  string   `json:"sku"`
+		Keywords             string   `json:"keywords"`
+		SellingPoints        string   `json:"sellingPoints"`
+		CompetitorLink       string   `json:"competitorLink"`
+		Model                string   `json:"model"`
+		TaskName             string   `json:"taskName"`
+		CopywritingTaskID    string   `json:"copywritingTaskId"`
+		ProductImages        []string `json:"productImages"` // 产品图片URL数组
 	}
 	
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -416,16 +417,27 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		
 		// 调用AI模型生成图片
 		imageReq := models.GenerateImageRequest{
-			Prompt:      prompt,
-			AspectRatio: "1:1",
-			Model:       req.Model,
+			Prompt:        prompt,
+			AspectRatio:   "1:1",
+			Model:         req.Model,
+			ProductImages: req.ProductImages, // 传递产品图片
 		}
 		
-		log.Printf("Calling AI service to generate image for task %s with model %s", taskID, req.Model)
+		log.Printf("Calling AI service to generate image for task %s with model %s (product images: %d)", 
+			taskID, req.Model, len(req.ProductImages))
 		generatedDataURL, err := h.multiModelService.GenerateImage(ctx, imageReq)
 		if err != nil {
 			log.Printf("Image generation failed for task %s: %v", taskID, err)
 			h.imageTaskService.SaveError(taskID, err.Error())
+			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
+			return
+		}
+		
+		// 验证返回的数据
+		if generatedDataURL == "" {
+			errMsg := "AI返回了空的图片数据"
+			log.Printf("Image generation failed for task %s: %s", taskID, errMsg)
+			h.imageTaskService.SaveError(taskID, errMsg)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 			return
 		}

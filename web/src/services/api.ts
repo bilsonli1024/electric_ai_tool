@@ -262,11 +262,19 @@ class ApiClient {
     competitorLink?: string;
     model: string;
     taskName?: string;
-    copywritingTaskId?: number;
-  }): Promise<{ data: any; task_id: number }> {
+    copywritingTaskId?: string;
+    productImages?: string[]; // 产品图片URL数组
+  }): Promise<{ data: any; task_id: string }> {
     return this.request('/api/tasks/generate-image', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  async uploadImageBase64(image: string, filename?: string): Promise<{ url: string; path: string }> {
+    return this.request('/api/upload/image-base64', {
+      method: 'POST',
+      body: JSON.stringify({ image, filename }),
     });
   }
 

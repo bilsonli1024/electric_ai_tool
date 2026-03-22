@@ -231,6 +231,11 @@ SKU: %s
 }
 
 func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.GenerateImageRequest) (string, error) {
+	// 检查是否有产品图片
+	if len(req.ProductImages) == 0 {
+		return "", fmt.Errorf("Gemini图片生成需要至少一张产品图片作为参考。请上传产品图片后重试，或选择其他模型（如GPT或DeepSeek）")
+	}
+	
 	aspectHint := "square format (1:1)"
 	if req.AspectRatio == "4:5" {
 		aspectHint = "portrait format (4:5)"
@@ -282,6 +287,7 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 		log.Printf("✅ Gemini Image API Response - Image generated successfully, data URL length: %d", len(imageURL))
 	} else {
 		log.Printf("⚠️  Gemini Image API Response - No image in response")
+		return "", fmt.Errorf("Gemini未返回图片。可能需要提供产品图片，或尝试使用其他模型")
 	}
 	
 	return imageURL, nil

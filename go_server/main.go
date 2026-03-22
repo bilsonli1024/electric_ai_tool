@@ -115,6 +115,10 @@ func main() {
 	taskCenterDomain := domain.NewTaskCenterDomain(taskCenterService, authService)
 	taskCenterDomain.RegisterRoutes(authMiddleware)
 
+	// 上传文件管理
+	uploadDomain := domain.NewUploadDomain(localStorageService, authService)
+	uploadDomain.RegisterRoutes(authMiddleware)
+
 	// 统一任务管理（旧架构，待废弃）
 	unifiedTaskDomain := domain.NewUnifiedTaskDomain(unifiedTaskService, authService)
 	unifiedTaskDomain.RegisterRoutes(authMiddleware)

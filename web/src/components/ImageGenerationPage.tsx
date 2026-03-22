@@ -195,6 +195,29 @@ export const ImageGenerationPage: React.FC = () => {
     try {
       const taskName = `图片生成_${sku || keywords}_${Date.now()}`;
       
+      // 如果有上传的图片，先上传到服务器
+      let productImageUrls: string[] = [];
+      if (imagePreviews.length > 0) {
+        setToast({ message: '正在上传图片...', type: 'info' });
+        
+        for (let i = 0; i < imagePreviews.length; i++) {
+          try {
+            const result = await apiClient.uploadImageBase64(
+              imagePreviews[i],
+              uploadedImages[i]?.name
+            );
+            productImageUrls.push(result.url);
+          } catch (error: any) {
+            console.error('Failed to upload image:', error);
+            setToast({ message: `图片${i + 1}上传失败: ${error.message}`, type: 'error' });
+            setIsGenerating(false);
+            return;
+          }
+        }
+        
+        setToast({ message: `${productImageUrls.length}张图片上传成功，开始生成...`, type: 'success' });
+      }
+      
       const response = await apiClient.generateImages({
         sku,
         keywords,
@@ -203,6 +226,7 @@ export const ImageGenerationPage: React.FC = () => {
         model: selectedModel,
         taskName,
         copywritingTaskId: selectedCopywritingTaskId || undefined,
+        productImages: productImageUrls.length > 0 ? productImageUrls : undefined,
       });
       
       // 设置当前任务ID并开始轮询
