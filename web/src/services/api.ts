@@ -78,10 +78,10 @@ class ApiClient {
   }
 
   async login(data: LoginRequest): Promise<AuthResponse> {
-    // 转换为后端支持的格式（兼容login_id和password_hash）
-    const payload: any = {
-      login_id: data.email, // 使用login_id字段
-      password_hash: data.password, // 使用password_hash字段
+    // 直接使用传入的login_id和password_hash
+    const payload = {
+      login_id: data.login_id,
+      password_hash: data.password_hash,
     };
     
     const response = await this.request<AuthResponse>('/api/auth/login', {

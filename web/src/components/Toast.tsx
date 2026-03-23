@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
+
 interface ToastProps {
   message: string;
-  type?: 'success' | 'error' | 'warning' | 'info';
+  type?: ToastType;
   duration?: number;
   onClose: () => void;
 }
@@ -50,4 +52,5 @@ const Toast: React.FC<ToastProps> = ({ message, type = 'error', duration = 3000,
   );
 };
 
+export { Toast };
 export default Toast;
