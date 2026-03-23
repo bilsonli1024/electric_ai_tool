@@ -119,6 +119,10 @@ func main() {
 	enumDomain := domain.NewEnumDomain()
 	enumDomain.RegisterRoutes(authMiddleware)
 
+	// 管理员API
+	adminDomain := domain.NewAdminDomain(config.DB)
+	adminDomain.RegisterRoutes()
+
 	// Static file serving
 	distPath := filepath.Join(execDir, "../web/dist")
 	if _, err := os.Stat(distPath); err == nil {

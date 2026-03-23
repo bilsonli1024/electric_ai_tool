@@ -2,6 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { apiClient } from '../services/api';
 
+const formatTime = (timestamp: number): string => {
+  const date = new Date(timestamp * 1000);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+};
+
+const getUserStatusText = (status: number): string => {
+  switch (status) {
+    case 0: return '待审批';
+    case 1: return '正常';
+    case 2: return '已删除';
+    default: return '未知';
+  }
+};
+
+const getUserTypeText = (type: number): string => {
+  return type === 99 ? '管理员' : '普通用户';
+};
+
 export const UserManagement: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,10 +77,10 @@ export const UserManagement: React.FC = () => {
         <div className="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-8">
           <div className="flex items-center space-x-4">
             <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center text-indigo-600 text-3xl font-bold shadow-lg">
-              {user.username.charAt(0).toUpperCase()}
+              {user.username ? user.username.charAt(0).toUpperCase() : 'U'}
             </div>
             <div className="text-white">
-              <h3 className="text-2xl font-bold">{user.username}</h3>
+              <h3 className="text-2xl font-bold">{user.username || '未设置用户名'}</h3>
               <p className="text-indigo-100">{user.email}</p>
             </div>
           </div>
@@ -71,34 +97,39 @@ export const UserManagement: React.FC = () => {
               <label className="text-sm font-medium text-gray-500">账号状态</label>
               <div>
                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                  user.status === 1
+                  user.user_status === 1
                     ? 'bg-green-100 text-green-800'
+                    : user.user_status === 0
+                    ? 'bg-yellow-100 text-yellow-800'
                     : 'bg-red-100 text-red-800'
                 }`}>
-                  {user.status === 1 ? '正常' : '已禁用'}
+                  {getUserStatusText(user.user_status)}
                 </span>
               </div>
             </div>
 
             <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-500">用户类型</label>
+              <div className="text-lg text-gray-800">{getUserTypeText(user.user_type)}</div>
+            </div>
+
+            <div className="space-y-2">
               <label className="text-sm font-medium text-gray-500">注册时间</label>
               <div className="text-lg text-gray-800">
-                {new Date(user.created_at).toLocaleString('zh-CN')}
+                {formatTime(user.ctime)}
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-500">最后登录</label>
+              <label className="text-sm font-medium text-gray-500">更新时间</label>
               <div className="text-lg text-gray-800">
-                {user.last_login_at
-                  ? new Date(user.last_login_at).toLocaleString('zh-CN')
-                  : '从未登录'}
+                {formatTime(user.mtime)}
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-500">用户名</label>
-              <div className="text-lg text-gray-800">{user.username}</div>
+              <div className="text-lg text-gray-800">{user.username || '未设置'}</div>
             </div>
 
             <div className="space-y-2">
@@ -118,7 +149,11 @@ export const UserManagement: React.FC = () => {
                 </div>
                 <div className="ml-3">
                   <p className="text-sm text-blue-700">
-                    您的账号已激活并可以正常使用所有功能。如需修改密码或其他设置，请联系管理员。
+                    {user.user_status === 1 
+                      ? '您的账号已激活并可以正常使用所有功能。如需修改密码或其他设置，请联系管理员。'
+                      : user.user_status === 0
+                      ? '您的账号正在等待管理员审批，审批通过后即可使用所有功能。'
+                      : '您的账号已被禁用，如有疑问请联系管理员。'}
                   </p>
                 </div>
               </div>

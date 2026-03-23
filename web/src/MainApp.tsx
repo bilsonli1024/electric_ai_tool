@@ -4,14 +4,19 @@ import { Auth } from './components/Auth';
 import { Navbar } from './components/Navbar';
 import { TaskCenter } from './components/TaskCenter';
 import { UserManagement } from './components/UserManagement';
+import { UserList } from './components/UserList';
+import { RoleList } from './components/RoleList';
+import { PermissionList } from './components/PermissionList';
+import { RolePermissionList } from './components/RolePermissionList';
 import { ModelTest } from './components/ModelTest';
 import { CopywritingGenerator } from './components/CopywritingGenerator';
 import { ImageGenerationPage } from './components/ImageGenerationPage';
 import { ImageGenerationResult } from './components/ImageGenerationResult';
 import ErrorToastContainer from './components/ErrorToastContainer';
 import { apiClient } from './services/api';
+import { User } from './types';
 
-type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest';
+type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest' | 'admin-users' | 'admin-roles' | 'admin-permissions' | 'admin-role-permissions';
 
 const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val: boolean) => void }> = ({ 
   isAuthenticated, 
@@ -19,13 +24,33 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  useEffect(() => {
+    loadCurrentUser();
+  }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const user = await apiClient.me();
+      setCurrentUser(user);
+    } catch (err) {
+      console.error('Failed to load current user:', err);
+    }
+  };
+
+  const isAdmin = currentUser?.user_type === 99;
   
   const currentPage = (): Page => {
     const path = location.pathname;
     if (path.startsWith('/copywriting')) return 'copywriting';
     if (path.startsWith('/image-generation')) return 'generator';
     if (path.startsWith('/tasks')) return 'tasks';
-    if (path.startsWith('/user')) return 'user';
+    if (path === '/user') return 'user';
+    if (path === '/admin/users') return 'admin-users';
+    if (path === '/admin/roles') return 'admin-roles';
+    if (path === '/admin/permissions') return 'admin-permissions';
+    if (path === '/admin/role-permissions') return 'admin-role-permissions';
     if (path.startsWith('/modeltest')) return 'modeltest';
     return 'copywriting';
   };
@@ -36,6 +61,10 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
       generator: '/image-generation',
       tasks: '/tasks',
       user: '/user',
+      'admin-users': '/admin/users',
+      'admin-roles': '/admin/roles',
+      'admin-permissions': '/admin/permissions',
+      'admin-role-permissions': '/admin/role-permissions',
       modeltest: '/modeltest'
     };
     navigate(paths[page]);
@@ -57,7 +86,7 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button
             onClick={() => setCurrentPage('copywriting')}
             className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
@@ -98,6 +127,58 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
           >
             🧪 联通性测试
           </button>
+
+          {isAdmin && (
+            <>
+              <div className="pt-4 mt-4 border-t border-gray-200">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-4 mb-2">
+                  管理员功能
+                </p>
+              </div>
+              <button
+                onClick={() => setCurrentPage('admin-users')}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                  currentPage() === 'admin-users'
+                    ? 'bg-indigo-50 text-indigo-600 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                👥 用户列表
+              </button>
+              <button
+                onClick={() => setCurrentPage('admin-roles')}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                  currentPage() === 'admin-roles'
+                    ? 'bg-indigo-50 text-indigo-600 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                🎭 角色列表
+              </button>
+              <button
+                onClick={() => setCurrentPage('admin-permissions')}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                  currentPage() === 'admin-permissions'
+                    ? 'bg-indigo-50 text-indigo-600 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                🔑 权限列表
+              </button>
+              <button
+                onClick={() => setCurrentPage('admin-role-permissions')}
+                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                  currentPage() === 'admin-role-permissions'
+                    ? 'bg-indigo-50 text-indigo-600 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                🔗 角色权限
+              </button>
+            </>
+          )}
+
+          <div className="pt-4 mt-4 border-t border-gray-200"></div>
           <button
             onClick={() => setCurrentPage('user')}
             className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
@@ -132,6 +213,10 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
             <Route path="/image-generation/result" element={<ImageGenerationResult />} />
             <Route path="/tasks" element={<TaskCenter />} />
             <Route path="/user" element={<UserManagement />} />
+            <Route path="/admin/users" element={<UserList />} />
+            <Route path="/admin/roles" element={<RoleList />} />
+            <Route path="/admin/permissions" element={<PermissionList />} />
+            <Route path="/admin/role-permissions" element={<RolePermissionList />} />
             <Route path="/modeltest" element={<ModelTest />} />
             <Route path="/" element={<CopywritingGenerator />} />
           </Routes>

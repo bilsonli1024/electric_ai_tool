@@ -2,10 +2,10 @@ export interface User {
   id: number;
   username: string;
   email: string;
-  created_at: string;
-  updated_at: string;
-  last_login_at?: string;
-  status: number;
+  user_type: number;
+  user_status: number;
+  ctime: number;
+  mtime: number;
 }
 
 export interface AuthResponse {
