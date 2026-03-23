@@ -23,7 +23,7 @@ func NewAuthService() *AuthService {
 
 // Register 用户注册（不自动登录）
 func (s *AuthService) Register(req models.RegisterRequest) error {
-	if req.Email == "" || req.Password == "" {
+	if req.Email == "" || req.PasswordHash == "" {
 		return fmt.Errorf("邮箱和密码不能为空")
 	}
 
@@ -41,11 +41,12 @@ func (s *AuthService) Register(req models.RegisterRequest) error {
 		return fmt.Errorf("该邮箱已被注册")
 	}
 
-	// 密码加密
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
-	}
+	// 生成随机盐值
+	salt := utils.GenerateSalt()
+	
+	// 使用MD5哈希 + salt 计算最终密码
+	// req.PasswordHash 是前端传来的MD5值
+	hashedPassword := utils.HashPasswordWithSalt(req.PasswordHash, salt)
 
 	// 确定用户类型
 	userType := models.UserTypeNormal
@@ -63,9 +64,9 @@ func (s *AuthService) Register(req models.RegisterRequest) error {
 	// 创建用户（状态为待审批）
 	currentTime := utils.GetCurrentTimestamp()
 	_, err = config.DB.Exec(
-		`INSERT INTO users_tab (email, password, username, user_type, user_status, ctime, mtime) 
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		req.Email, string(hashedPassword), username, userType, models.UserStatusPendingApproval, currentTime, currentTime,
+		`INSERT INTO users_tab (email, password, salt, username, user_type, user_status, ctime, mtime) 
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		req.Email, hashedPassword, salt, username, userType, models.UserStatusPendingApproval, currentTime, currentTime,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
@@ -79,33 +80,30 @@ func (s *AuthService) Register(req models.RegisterRequest) error {
 func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, error) {
 	// 兼容新旧两种格式
 	email := req.Email
-	password := req.Password
+	passwordMD5 := req.Password
 	
 	// 如果是旧格式（login_id + password_hash）
 	if email == "" && req.LoginID != "" {
 		email = req.LoginID
 	}
-	if password == "" && req.PasswordHash != "" {
-		// 旧格式使用MD5哈希，需要特殊处理
-		// 这里我们假设旧格式的password_hash是前端MD5加密后的结果
-		// 但数据库存储的是bcrypt，所以需要让用户使用明文密码
-		// 或者我们直接把MD5哈希当作密码来验证
-		password = req.PasswordHash
+	if passwordMD5 == "" && req.PasswordHash != "" {
+		passwordMD5 = req.PasswordHash
 	}
 	
-	if email == "" || password == "" {
+	if email == "" || passwordMD5 == "" {
 		return nil, "", fmt.Errorf("邮箱和密码不能为空")
 	}
 
-	// 查询用户
+	// 查询用户（包含salt）
 	var user models.User
 	var storedPassword string
+	var salt string
 	err := config.DB.QueryRow(
-		`SELECT id, email, password, username, user_type, user_status, ctime, mtime 
+		`SELECT id, email, password, salt, username, user_type, user_status, ctime, mtime 
 		 FROM users_tab WHERE email = ?`,
 		email,
 	).Scan(
-		&user.ID, &user.Email, &storedPassword, &user.Username, &user.UserType, &user.UserStatus,
+		&user.ID, &user.Email, &storedPassword, &salt, &user.Username, &user.UserType, &user.UserStatus,
 		&user.Ctime, &user.Mtime,
 	)
 
@@ -124,9 +122,8 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, erro
 		return nil, "", fmt.Errorf("您的账号已被删除")
 	}
 
-	// 验证密码
-	err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
-	if err != nil {
+	// 验证密码：SHA256(passwordMD5 + salt)
+	if !utils.VerifyPassword(passwordMD5, salt, storedPassword) {
 		return nil, "", fmt.Errorf("邮箱或密码错误")
 	}
 

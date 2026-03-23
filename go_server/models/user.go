@@ -4,7 +4,8 @@ package models
 type User struct {
 	ID         int64  `json:"id"`
 	Email      string `json:"email"`
-	Password   string `json:"-"`              // 密码（加密后，不返回给前端）
+	Password   string `json:"-"`              // 密码（SHA256哈希，不返回给前端）
+	Salt       string `json:"-"`              // 密码盐值（不返回给前端）
 	Username   string `json:"username"`
 	UserType   int    `json:"user_type"`      // 用户类型：0=普通用户, 99=管理员
 	UserStatus int    `json:"user_status"`    // 用户状态：0=待审批, 1=正常, 2=已删除
@@ -22,10 +23,11 @@ type Session struct {
 
 // RegisterRequest 注册请求
 type RegisterRequest struct {
-	Email       string `json:"email"`
-	Password    string `json:"password"`
-	Username    string `json:"username"`
-	IsAdmin     bool   `json:"is_admin"`      // 是否申请管理员权限
+	Email            string `json:"email"`
+	PasswordHash     string `json:"password_hash"` // 前端MD5哈希后的密码
+	Username         string `json:"username"`
+	IsAdmin          bool   `json:"is_admin"`      // 是否申请管理员权限
+	VerificationCode string `json:"verification_code,omitempty"` // 验证码（如果需要）
 }
 
 // LoginRequest 登录请求
