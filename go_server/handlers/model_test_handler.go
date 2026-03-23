@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"electric_ai_tool/go_server/models"
 	"electric_ai_tool/go_server/services"
 	"electric_ai_tool/go_server/utils"
 )
@@ -47,7 +46,7 @@ func (h *ModelTestHandler) TestModel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Model == "" {
-		req.Model = models.ModelGemini
+		req.Model = "gemini"
 	}
 
 	if req.Prompt == "" {
@@ -98,9 +97,9 @@ func (h *ModelTestHandler) TestAllModels(w http.ResponseWriter, r *http.Request)
 	}
 
 	modelsList := []string{
-		models.ModelGemini,
-		models.ModelGPT,
-		models.ModelDeepSeek,
+		"gemini",
+		"gpt",
+		"deepseek",
 	}
 
 	results := make([]ModelTestResponse, 0, len(modelsList))

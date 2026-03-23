@@ -17,7 +17,6 @@ import (
 type CopywritingHandler struct {
 	copywritingService     *services.CopywritingService
 	authService            *services.AuthService
-	unifiedTaskService     *services.UnifiedTaskService
 	taskCenterService      *services.TaskCenterService
 	copywritingTaskService *services.CopywritingTaskService
 }
@@ -25,14 +24,12 @@ type CopywritingHandler struct {
 func NewCopywritingHandler(
 	copywritingService *services.CopywritingService,
 	authService *services.AuthService,
-	unifiedTaskService *services.UnifiedTaskService,
 	taskCenterService *services.TaskCenterService,
 	copywritingTaskService *services.CopywritingTaskService,
 ) *CopywritingHandler {
 	return &CopywritingHandler{
 		copywritingService:     copywritingService,
 		authService:            authService,
-		unifiedTaskService:     unifiedTaskService,
 		taskCenterService:      taskCenterService,
 		copywritingTaskService: copywritingTaskService,
 	}
@@ -69,12 +66,13 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if req.Model == "" {
+	// Model现在是int类型
+	if req.Model == 0 {
 		req.Model = models.ModelGemini
 	}
 
 	if req.TaskName == "" {
-		req.TaskName = fmt.Sprintf("文案任务_%d", time.Now().Unix())
+		req.TaskName = fmt.Sprintf("文案任务_%d", utils.GetCurrentTimestamp())
 	}
 
 	// 获取用户邮箱
@@ -105,8 +103,11 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 	
 	log.Printf("Created copywriting task: task_id=%s, operator=%s", taskID, operator)
 
-	// 4. 更新状态为进行中
-	h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusOngoing)
+	// 4. 更新状态为analyzing（分析竞品中）
+	h.taskCenterService.UpdateTaskStatus(taskID, models.MapDetailStatusToTaskStatus(models.TaskTypeCopywriting, models.CopywritingStatusAnalyzing))
+	h.copywritingTaskService.UpdateDetailStatus(taskID, models.CopywritingStatusAnalyzing)
+
+	utils.LogInfo("Starting competitor analysis for task %s", taskID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -115,7 +116,9 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 	analysis, err := h.copywritingService.AnalyzeCompetitors(ctx, req.URLs, req.Model)
 	if err != nil {
 		h.copywritingTaskService.SaveError(taskID, err.Error())
+		h.copywritingTaskService.UpdateDetailStatus(taskID, models.CopywritingStatusFailed)
 		h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
+		utils.LogError("Competitor analysis failed for task %s: %v", taskID, err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -127,8 +130,11 @@ func (h *CopywritingHandler) AnalyzeCompetitors(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// 7. 保持状态为ongoing，等待用户选择数据并生成文案
-	// 状态会在GenerateCopy时更新为completed
+	// 7. 更新状态为analyzed（分析完成），等待用户选择数据并生成文案
+	h.copywritingTaskService.UpdateDetailStatus(taskID, models.CopywritingStatusAnalyzed)
+	h.taskCenterService.UpdateTaskStatus(taskID, models.MapDetailStatusToTaskStatus(models.TaskTypeCopywriting, models.CopywritingStatusAnalyzed))
+	
+	utils.LogInfo("Competitor analysis completed for task %s", taskID)
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    analysis,
@@ -143,13 +149,13 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 	}
 
 	var req struct {
-		TaskID                    string                     `json:"task_id"` // 改为string类型
+		TaskID                    string                     `json:"task_id"`
 		SelectedKeywords          []string                   `json:"selectedKeywords"`
 		SelectedSellingPoints     []string                   `json:"selectedSellingPoints"`
 		SelectedReviewInsights    []string                   `json:"selectedReviewInsights"`
 		SelectedImageInsights     []string                   `json:"selectedImageInsights"`
 		ProductDetails            models.ProductDetails      `json:"productDetails"`
-		Model                     string                     `json:"model"`
+		Model                     int                        `json:"model"` // INT类型
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -162,7 +168,7 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if req.Model == "" {
+	if req.Model == 0 {
 		req.Model = models.ModelGemini
 	}
 
@@ -183,7 +189,13 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 2. 生成文案
+	// 2. 更新状态为generating（生成文案中）
+	h.copywritingTaskService.UpdateDetailStatus(req.TaskID, models.CopywritingStatusGenerating)
+	h.taskCenterService.UpdateTaskStatus(req.TaskID, models.MapDetailStatusToTaskStatus(models.TaskTypeCopywriting, models.CopywritingStatusGenerating))
+	
+	utils.LogInfo("Starting copywriting generation for task %s", req.TaskID)
+
+	// 3. 生成文案
 	copyReq := models.GenerateCopyRequest{
 		SelectedKeywords:       req.SelectedKeywords,
 		SelectedSellingPoints:  req.SelectedSellingPoints,
@@ -196,20 +208,25 @@ func (h *CopywritingHandler) GenerateCopy(w http.ResponseWriter, r *http.Request
 	copy, err := h.copywritingService.GenerateCopy(ctx, copyReq)
 	if err != nil {
 		h.copywritingTaskService.SaveError(req.TaskID, err.Error())
+		h.copywritingTaskService.UpdateDetailStatus(req.TaskID, models.CopywritingStatusFailed)
 		h.taskCenterService.UpdateTaskStatus(req.TaskID, models.TaskStatusFailed)
+		utils.LogError("Copywriting generation failed for task %s: %v", req.TaskID, err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	// 3. 保存生成的文案
+	// 4. 保存生成的文案
 	copyJSON, _ := json.Marshal(copy)
 	if err := h.copywritingTaskService.SaveGeneratedCopy(req.TaskID, string(copyJSON), req.Model); err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 
-	// 4. 更新任务状态为已完成
+	// 5. 更新任务状态为已完成
+	h.copywritingTaskService.UpdateDetailStatus(req.TaskID, models.CopywritingStatusCompleted)
 	h.taskCenterService.UpdateTaskStatus(req.TaskID, models.TaskStatusCompleted)
+	
+	utils.LogInfo("Copywriting generation completed for task %s", req.TaskID)
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":    copy,

@@ -10,11 +10,7 @@ import (
 
 type TaskDomain struct {
 	multiModelService   *services.MultiModelService
-	taskService         *services.TaskService
-	taskHistoryService  *services.TaskHistoryService
-	cdnService          *services.CDNService
 	authService         *services.AuthService
-	unifiedTaskService  *services.UnifiedTaskService
 	taskCenterService   *services.TaskCenterService
 	imageTaskService    *services.ImageTaskService
 	localStorageService *services.LocalStorageService
@@ -22,22 +18,14 @@ type TaskDomain struct {
 
 func NewTaskDomain(
 	multiModelService *services.MultiModelService,
-	taskService *services.TaskService,
-	taskHistoryService *services.TaskHistoryService,
-	cdnService *services.CDNService,
 	authService *services.AuthService,
-	unifiedTaskService *services.UnifiedTaskService,
 	taskCenterService *services.TaskCenterService,
 	imageTaskService *services.ImageTaskService,
 	localStorageService *services.LocalStorageService,
 ) *TaskDomain {
 	return &TaskDomain{
 		multiModelService:   multiModelService,
-		taskService:         taskService,
-		taskHistoryService:  taskHistoryService,
-		cdnService:          cdnService,
 		authService:         authService,
-		unifiedTaskService:  unifiedTaskService,
 		taskCenterService:   taskCenterService,
 		imageTaskService:    imageTaskService,
 		localStorageService: localStorageService,
@@ -47,11 +35,7 @@ func NewTaskDomain(
 func (d *TaskDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddleware) {
 	taskHandler := handlers.NewTaskHandler(
 		d.multiModelService,
-		d.taskService,
-		d.taskHistoryService,
-		d.cdnService,
 		d.authService,
-		d.unifiedTaskService,
 		d.taskCenterService,
 		d.imageTaskService,
 		d.localStorageService,

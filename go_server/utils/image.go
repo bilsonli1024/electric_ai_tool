@@ -3,11 +3,56 @@ package utils
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"strings"
 
 	"google.golang.org/genai"
 )
+
+// ConvertURLToDataURL 将HTTP URL转换为data URL
+func ConvertURLToDataURL(url string) (string, error) {
+	// 如果已经是data URL，直接返回
+	if strings.HasPrefix(url, "data:") {
+		return url, nil
+	}
+	
+	LogInfo("Converting URL to data URL: %s", url)
+	
+	// 从HTTP URL下载图片
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to download image: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download image: status %d", resp.StatusCode)
+	}
+	
+	// 读取图片数据
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read image data: %w", err)
+	}
+	
+	// 获取content type
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg" // 默认
+	}
+	
+	// 编码为base64
+	encoded := base64.StdEncoding.EncodeToString(data)
+	
+	// 构造data URL
+	dataURL := fmt.Sprintf("data:%s;base64,%s", contentType, encoded)
+	
+	LogInfo("Successfully converted URL to data URL (size: %d bytes)", len(dataURL))
+	
+	return dataURL, nil
+}
 
 func MakeImagePart(dataURL string) (*genai.Part, error) {
 	mimeType := GetMimeType(dataURL)

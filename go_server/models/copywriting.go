@@ -55,7 +55,7 @@ type CopywritingTask struct {
 
 type AnalyzeCompetitorsRequest struct {
 	URLs     []string `json:"urls"`
-	Model    string   `json:"model"`
+	Model    int      `json:"model"` // INT类型：1=Gemini, 2=GPT, 3=DeepSeek
 	TaskName string   `json:"task_name"`
 }
 
@@ -65,14 +65,6 @@ type GenerateCopyRequest struct {
 	SelectedReviewInsights []string       `json:"selectedReviewInsights"`
 	SelectedImageInsights  []string       `json:"selectedImageInsights"`
 	ProductDetails         ProductDetails `json:"productDetails"`
-	Model                  string         `json:"model"`
+	Model                  int            `json:"model"` // INT类型：1=Gemini, 2=GPT, 3=DeepSeek
 }
 
-const (
-	CopyStatusAnalyzing       = 0
-	CopyStatusAnalyzed        = 1
-	CopyStatusGenerating      = 2
-	CopyStatusCompleted       = 3
-	CopyStatusAnalyzeFailed   = 10
-	CopyStatusGenerateFailed  = 11
-)

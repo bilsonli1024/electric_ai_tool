@@ -26,39 +26,18 @@ func NewMultiModelService(geminiClient *genai.Client) *MultiModelService {
 
 // TestChat 简单的聊天测试接口，用于模型连通性测试
 func (s *MultiModelService) TestChat(ctx context.Context, model string, prompt string) (string, error) {
-	switch model {
-	case models.ModelGemini:
-		return s.testChatWithGemini(ctx, prompt)
-	case models.ModelGPT:
-		return s.testChatWithGPT(ctx, prompt)
-	case models.ModelDeepSeek:
-		return s.testChatWithDeepSeek(ctx, prompt)
-	default:
-		return "", fmt.Errorf("unsupported model: %s", model)
-	}
+	// 默认使用Gemini
+	return s.testChatWithGemini(ctx, prompt)
 }
 
 func (s *MultiModelService) AnalyzeSellingPoints(ctx context.Context, req models.AnalyzeRequest) ([]models.SellingPoint, error) {
-	model := req.Model
-	if model == "" {
-		model = models.ModelGemini
-	}
-
-	switch model {
-	case models.ModelGemini:
-		return s.analyzeWithGemini(ctx, req)
-	case models.ModelGPT:
-		return s.analyzeWithGPT(ctx, req)
-	case models.ModelDeepSeek:
-		return s.analyzeWithDeepSeek(ctx, req)
-	default:
-		return s.analyzeWithGemini(ctx, req)
-	}
+	// 默认使用Gemini
+	return s.analyzeWithGemini(ctx, req)
 }
 
 func (s *MultiModelService) GenerateImage(ctx context.Context, req models.GenerateImageRequest) (string, error) {
 	model := req.Model
-	if model == "" {
+	if model == 0 {
 		model = models.ModelGemini
 	}
 
@@ -250,18 +229,30 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 		req.Prompt, stylePrompt, aspectHint)
 
 	parts := []*genai.Part{}
-	for _, dataURL := range req.ProductImages {
+	for i, imageURL := range req.ProductImages {
+		// 转换URL为data URL
+		dataURL, err := utils.ConvertURLToDataURL(imageURL)
+		if err != nil {
+			return "", fmt.Errorf("failed to convert product image %d: %w", i+1, err)
+		}
+		
 		part, err := utils.MakeImagePart(dataURL)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to create image part %d: %w", i+1, err)
 		}
 		parts = append(parts, part)
 	}
 
 	if req.StyleRefImage != "" {
-		part, err := utils.MakeImagePart(req.StyleRefImage)
+		// 转换风格参考图
+		dataURL, err := utils.ConvertURLToDataURL(req.StyleRefImage)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to convert style reference image: %w", err)
+		}
+		
+		part, err := utils.MakeImagePart(dataURL)
+		if err != nil {
+			return "", fmt.Errorf("failed to create style reference part: %w", err)
 		}
 		parts = append(parts, part)
 	}

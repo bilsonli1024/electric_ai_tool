@@ -33,20 +33,19 @@ func (m *AuthMiddleware) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		log.Printf("Auth: validating session %s... (length: %d)", sessionID[:min(8, len(sessionID))], len(sessionID))
-		user, err := m.authService.ValidateSession(sessionID)
-		if err != nil {
-			log.Printf("Auth failed: session validation error: %v", err)
-			utils.RespondError(w, err, http.StatusUnauthorized)
-			return
-		}
+	log.Printf("Auth: validating session %s... (length: %d)", sessionID[:min(8, len(sessionID))], len(sessionID))
+	userID, err := m.authService.ValidateSession(sessionID)
+	if err != nil {
+		log.Printf("Auth failed: session validation error: %v", err)
+		utils.RespondError(w, err, http.StatusUnauthorized)
+		return
+	}
 
-		log.Printf("Auth success: user_id=%d, username=%s", user.ID, user.Username)
-		r.Header.Set("X-User-ID", fmt.Sprintf("%d", user.ID))
-		r.Header.Set("X-Username", user.Username)
+	log.Printf("Auth success: user_id=%d", userID)
+	r.Header.Set("X-User-ID", fmt.Sprintf("%d", userID))
 
-		ctx := context.WithValue(r.Context(), "user_id", user.ID)
-		next(w, r.WithContext(ctx))
+	ctx := context.WithValue(r.Context(), "user_id", userID)
+	next(w, r.WithContext(ctx))
 	}
 }
 

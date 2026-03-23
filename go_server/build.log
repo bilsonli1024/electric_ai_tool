@@ -1,0 +1,3 @@
+../../../../../.gvm/pkgsets/go1.18.10/global/pkg/mod/google.golang.org/grpc@v1.66.2/experimental/stats/metricregistry.go:22:2: package maps is not in std (/Users/bilson.li/.gvm/gos/go1.18.10/src/maps)
+../../../../../.gvm/pkgsets/go1.18.10/global/pkg/mod/google.golang.org/grpc@v1.66.2/clientconn.go:27:2: package slices is not in std (/Users/bilson.li/.gvm/gos/go1.18.10/src/slices)
+../../../../../.gvm/pkgsets/go1.18.10/global/pkg/mod/google.golang.org/genai@v1.51.0/api_client.go:24:2: package iter is not in std (/Users/bilson.li/.gvm/gos/go1.18.10/src/iter)

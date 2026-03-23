@@ -1,17 +1,18 @@
 package services
 
 import (
-	"crypto/md5"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
 	"regexp"
-	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"electric_ai_tool/go_server/config"
 	"electric_ai_tool/go_server/models"
+	"electric_ai_tool/go_server/utils"
 )
 
 type AuthService struct{}
@@ -20,347 +21,393 @@ func NewAuthService() *AuthService {
 	return &AuthService{}
 }
 
-func (s *AuthService) Register(req models.RegisterRequest) (*models.User, error) {
-	if req.Email == "" || req.PasswordHash == "" {
-		return nil, fmt.Errorf("email and password are required")
+// Register 用户注册（不自动登录）
+func (s *AuthService) Register(req models.RegisterRequest) error {
+	if req.Email == "" || req.Password == "" {
+		return fmt.Errorf("邮箱和密码不能为空")
 	}
 
 	if !s.isValidEmail(req.Email) {
-		return nil, fmt.Errorf("invalid email format")
+		return fmt.Errorf("邮箱格式不正确")
 	}
 
+	// 检查邮箱是否已存在
 	var count int
 	err := config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE email = ?", req.Email).Scan(&count)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check existing user: %w", err)
+		return fmt.Errorf("failed to check existing user: %w", err)
 	}
 	if count > 0 {
-		return nil, fmt.Errorf("email already exists")
+		return fmt.Errorf("该邮箱已被注册")
 	}
 
-	salt := s.generateSalt()
-	finalHash := s.hashPasswordWithSalt(req.PasswordHash, salt)
+	// 密码加密
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
 
-	username := s.generateUsernameFromEmail(req.Email)
+	// 确定用户类型
+	userType := models.UserTypeNormal
+	if req.IsAdmin {
+		userType = models.UserTypeAdmin
+	}
+
+	// 生成用户名
+	username := req.Username
+	if username == "" {
+		username = s.generateUsernameFromEmail(req.Email)
+	}
 	username = s.ensureUniqueUsername(username)
 
-	result, err := config.DB.Exec(
-		"INSERT INTO users_tab (username, email, password_hash, salt) VALUES (?, ?, ?, ?)",
-		username, req.Email, finalHash, salt,
+	// 创建用户（状态为待审批）
+	currentTime := utils.GetCurrentTimestamp()
+	_, err = config.DB.Exec(
+		`INSERT INTO users_tab (email, password, username, user_type, user_status, ctime, mtime) 
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		req.Email, string(hashedPassword), username, userType, models.UserStatusPendingApproval, currentTime, currentTime,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return fmt.Errorf("failed to create user: %w", err)
 	}
 
-	userID, _ := result.LastInsertId()
-	user := &models.User{
-		ID:       userID,
-		Username: username,
-		Email:    req.Email,
-		Status:   1,
-	}
-
-	// Assign default user role
-	rbacService := NewRBACService()
-	if userRole, err := rbacService.GetRoleByCode(models.RoleUser); err == nil {
-		rbacService.AssignRoleToUser(userID, userRole.ID)
-	}
-
-	return user, nil
+	utils.LogInfo("User registered: %s (type: %d, status: pending approval)", req.Email, userType)
+	return nil
 }
 
+// Login 用户登录
 func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, error) {
-	if req.LoginID == "" || req.PasswordHash == "" {
-		return nil, "", fmt.Errorf("login ID and password are required")
+	if req.Email == "" || req.Password == "" {
+		return nil, "", fmt.Errorf("邮箱和密码不能为空")
 	}
 
+	// 查询用户
 	var user models.User
-	var query string
-	
-	if s.isValidEmail(req.LoginID) {
-		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, status FROM users_tab WHERE email = ?"
-	} else {
-		query = "SELECT id, username, email, password_hash, salt, created_at, updated_at, status FROM users_tab WHERE username = ?"
-	}
-
-	var lastLoginAt sql.NullTime
-	err := config.DB.QueryRow(query, req.LoginID).Scan(
-		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Salt,
-		&user.CreatedAt, &user.UpdatedAt, &user.Status,
+	var password string
+	err := config.DB.QueryRow(
+		`SELECT id, email, password, username, user_type, user_status, ctime, mtime 
+		 FROM users_tab WHERE email = ?`,
+		req.Email,
+	).Scan(
+		&user.ID, &user.Email, &password, &user.Username, &user.UserType, &user.UserStatus,
+		&user.Ctime, &user.Mtime,
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, "", fmt.Errorf("invalid credentials")
+		return nil, "", fmt.Errorf("邮箱或密码错误")
 	}
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to query user: %w", err)
 	}
 
-	if user.Status != 1 {
-		return nil, "", fmt.Errorf("user is inactive")
+	// 检查用户状态
+	if user.UserStatus == models.UserStatusPendingApproval {
+		return nil, "", fmt.Errorf("您的账号正在审核中，请等待管理员审批")
+	}
+	if user.UserStatus == models.UserStatusDeleted {
+		return nil, "", fmt.Errorf("您的账号已被删除")
 	}
 
-	expectedHash := s.hashPasswordWithSalt(req.PasswordHash, user.Salt)
-	if expectedHash != user.PasswordHash {
-		return nil, "", fmt.Errorf("invalid credentials")
+	// 验证密码
+	err = bcrypt.CompareHashAndPassword([]byte(password), []byte(req.Password))
+	if err != nil {
+		return nil, "", fmt.Errorf("邮箱或密码错误")
 	}
 
+	// 创建会话
 	sessionID, err := s.CreateSession(user.ID)
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("failed to create session: %w", err)
 	}
 
-	s.logUserLogin(user.ID, sessionID, models.LoginTypeLogin, req.LoginIP, req.UserAgent)
-
-	if lastLoginAt.Valid {
-		user.LastLoginAt = &lastLoginAt.Time
-	}
-
+	utils.LogInfo("User logged in: %s (id: %d)", user.Email, user.ID)
 	return &user, sessionID, nil
 }
 
-func (s *AuthService) ForgotPassword(req models.ForgotPasswordRequest) error {
-	if req.Email == "" {
-		return fmt.Errorf("email is required")
-	}
-
-	if !s.isValidEmail(req.Email) {
-		return fmt.Errorf("invalid email format")
-	}
-
-	var userID int64
-	err := config.DB.QueryRow("SELECT id FROM users_tab WHERE email = ?", req.Email).Scan(&userID)
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to query user: %w", err)
-	}
-
-	token := s.generateResetToken()
-	expiresAt := time.Now().Add(1 * time.Hour)
-
-	_, err = config.DB.Exec(
-		"INSERT INTO password_reset_tokens_tab (user_id, token, expires_at) VALUES (?, ?, ?)",
-		userID, token, expiresAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create reset token: %w", err)
-	}
-
-	// TODO: 在生产环境中，这里应该发送真实的邮件
-	// 目前仅记录到日志，开发时可以从日志中复制token
-	log.Printf("Password reset token for user %d: %s", userID, token)
-	log.Printf("Reset link: http://localhost:5173/?reset_token=%s", token)
-
-	return nil
-}
-
-func (s *AuthService) ResetPassword(req models.ResetPasswordRequest) error {
-	if req.Token == "" || req.NewPasswordHash == "" {
-		return fmt.Errorf("token and new password are required")
-	}
-
-	var tokenRecord models.PasswordResetToken
-	err := config.DB.QueryRow(
-		"SELECT id, user_id, token, expires_at, used FROM password_reset_tokens_tab WHERE token = ?",
-		req.Token,
-	).Scan(&tokenRecord.ID, &tokenRecord.UserID, &tokenRecord.Token, &tokenRecord.ExpiresAt, &tokenRecord.Used)
-
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("invalid or expired token")
-	}
-	if err != nil {
-		return fmt.Errorf("failed to query token: %w", err)
-	}
-
-	if tokenRecord.Used {
-		return fmt.Errorf("token has already been used")
-	}
-
-	if tokenRecord.ExpiresAt.Before(time.Now()) {
-		return fmt.Errorf("token has expired")
-	}
-
-	salt := s.generateSalt()
-	finalHash := s.hashPasswordWithSalt(req.NewPasswordHash, salt)
-
-	tx, err := config.DB.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec(
-		"UPDATE users_tab SET password_hash = ?, salt = ? WHERE id = ?",
-		finalHash, salt, tokenRecord.UserID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update password: %w", err)
-	}
-
-	_, err = tx.Exec(
-		"UPDATE password_reset_tokens_tab SET used = 1 WHERE id = ?",
-		tokenRecord.ID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to mark token as used: %w", err)
-	}
-
-	_, err = tx.Exec("DELETE FROM sessions_tab WHERE user_id = ?", tokenRecord.UserID)
-	if err != nil {
-		return fmt.Errorf("failed to invalidate sessions: %w", err)
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
-}
-
+// CreateSession 创建会话
 func (s *AuthService) CreateSession(userID int64) (string, error) {
 	sessionID := s.generateSessionID()
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := utils.GetCurrentTimestamp() + 7*24*60*60 // 7天后过期
+	ctime := utils.GetCurrentTimestamp()
 
 	_, err := config.DB.Exec(
-		"INSERT INTO sessions_tab (id, user_id, expires_at) VALUES (?, ?, ?)",
-		sessionID, userID, expiresAt,
+		`INSERT INTO sessions_tab (id, user_id, expires_at, ctime) VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE expires_at = ?, ctime = ?`,
+		sessionID, userID, expiresAt, ctime, expiresAt, ctime,
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create session: %w", err)
+		return "", err
 	}
 
 	return sessionID, nil
 }
 
-func (s *AuthService) ValidateSession(sessionID string) (*models.User, error) {
-	log.Printf("ValidateSession: checking session %s...", sessionID[:min(8, len(sessionID))])
-	
-	var session models.Session
+// ValidateSession 验证会话
+func (s *AuthService) ValidateSession(sessionID string) (int64, error) {
+	var userID int64
+	var expiresAt int64
+
 	err := config.DB.QueryRow(
-		"SELECT id, user_id, expires_at FROM sessions_tab WHERE id = ?",
+		"SELECT user_id, expires_at FROM sessions_tab WHERE id = ?",
 		sessionID,
-	).Scan(&session.ID, &session.UserID, &session.ExpiresAt)
+	).Scan(&userID, &expiresAt)
 
 	if err == sql.ErrNoRows {
-		log.Printf("ValidateSession: session not found in database")
-		return nil, fmt.Errorf("invalid session")
+		return 0, fmt.Errorf("invalid session")
 	}
 	if err != nil {
-		log.Printf("ValidateSession: database error: %v", err)
-		return nil, fmt.Errorf("failed to query session: %w", err)
+		return 0, err
 	}
 
-	log.Printf("ValidateSession: found session for user_id=%d, expires_at=%v", session.UserID, session.ExpiresAt)
-
-	if session.ExpiresAt.Before(time.Now()) {
-		log.Printf("ValidateSession: session expired at %v", session.ExpiresAt)
-		config.DB.Exec("DELETE FROM sessions_tab WHERE id = ?", sessionID)
-		return nil, fmt.Errorf("session expired")
+	// 检查是否过期
+	if expiresAt < utils.GetCurrentTimestamp() {
+		return 0, fmt.Errorf("session expired")
 	}
 
-	var user models.User
-	var lastLoginAt sql.NullTime
-	err = config.DB.QueryRow(
-		"SELECT id, username, email, created_at, updated_at, status FROM users_tab WHERE id = ?",
-		session.UserID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt, &user.Status)
-
-	if err != nil {
-		log.Printf("ValidateSession: failed to query user: %v", err)
-		return nil, fmt.Errorf("failed to query user: %w", err)
-	}
-
-	if user.Status != 1 {
-		log.Printf("ValidateSession: user status is %d (inactive)", user.Status)
-		return nil, fmt.Errorf("user is inactive")
-	}
-
-	if lastLoginAt.Valid {
-		user.LastLoginAt = &lastLoginAt.Time
-	}
-
-	log.Printf("ValidateSession: validation successful for user %s (id=%d)", user.Username, user.ID)
-	return &user, nil
+	return userID, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func (s *AuthService) Logout(sessionID string) error {
-	var userID int64
-	config.DB.QueryRow("SELECT user_id FROM sessions_tab WHERE id = ?", sessionID).Scan(&userID)
-	
-	_, err := config.DB.Exec("DELETE FROM sessions_tab WHERE id = ?", sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to delete session: %w", err)
-	}
-	
-	if userID > 0 {
-		s.logUserLogin(userID, sessionID, models.LoginTypeLogout, "", "")
-	}
-	
-	return nil
-}
-
+// GetUserByID 根据ID获取用户
 func (s *AuthService) GetUserByID(userID int64) (*models.User, error) {
 	var user models.User
-	var lastLoginAt sql.NullTime
-	
-	err := config.DB.QueryRow(`
-		SELECT id, username, email, created_at, updated_at, status 
-		FROM users_tab 
-		WHERE id = ?`,
+	err := config.DB.QueryRow(
+		`SELECT id, email, username, user_type, user_status, ctime, mtime 
+		 FROM users_tab WHERE id = ?`,
 		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt, &user.UpdatedAt, &user.Status)
-	
+	).Scan(
+		&user.ID, &user.Email, &user.Username, &user.UserType, &user.UserStatus,
+		&user.Ctime, &user.Mtime,
+	)
+
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("user not found")
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to query user: %w", err)
+		return nil, err
 	}
-	
-	if lastLoginAt.Valid {
-		user.LastLoginAt = &lastLoginAt.Time
-	}
-	
+
 	return &user, nil
 }
 
-func (s *AuthService) SwitchUser(oldSessionID string, newUserID int64) error {
-	var oldUserID int64
-	config.DB.QueryRow("SELECT user_id FROM sessions_tab WHERE id = ?", oldSessionID).Scan(&oldUserID)
-	
-	if oldUserID > 0 {
-		s.logUserLogin(oldUserID, oldSessionID, models.LoginTypeSwitch, "", "")
+// GetUserByEmail 根据邮箱获取用户
+func (s *AuthService) GetUserByEmail(email string) (*models.User, error) {
+	var user models.User
+	err := config.DB.QueryRow(
+		`SELECT id, email, username, user_type, user_status, ctime, mtime 
+		 FROM users_tab WHERE email = ?`,
+		email,
+	).Scan(
+		&user.ID, &user.Email, &user.Username, &user.UserType, &user.UserStatus,
+		&user.Ctime, &user.Mtime,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("user not found")
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// Logout 用户登出
+func (s *AuthService) Logout(sessionID string) error {
+	_, err := config.DB.Exec("DELETE FROM sessions_tab WHERE id = ?", sessionID)
+	return err
+}
+
+// ForgotPassword 忘记密码 - 生成重置token并发送邮件
+func (s *AuthService) ForgotPassword(email string) error {
+	// 1. 检查用户是否存在
+	var userID int64
+	var userStatus int
+	err := config.DB.QueryRow(
+		"SELECT id, user_status FROM users_tab WHERE email = ?",
+		email,
+	).Scan(&userID, &userStatus)
+	
+	if err == sql.ErrNoRows {
+		// 为了安全，即使用户不存在也返回成功
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// 检查用户状态
+	if userStatus != models.UserStatusNormal {
+		return fmt.Errorf("用户状态异常")
+	}
+
+	// 2. 生成重置token
+	token := s.generateResetToken()
+	expiresAt := utils.GetCurrentTimestamp() + 3600 // 1小时后过期
+	ctime := utils.GetCurrentTimestamp()
+
+	// 3. 保存token到数据库
+	_, err = config.DB.Exec(
+		`INSERT INTO password_reset_tokens_tab (user_id, token, expires_at, used, ctime)
+		 VALUES (?, ?, ?, 0, ?)`,
+		userID, token, expiresAt, ctime,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 4. TODO: 发送重置邮件（这里暂时只记录日志）
+	log.Printf("Password reset token for %s: %s (expires at %d)", email, token, expiresAt)
 	
 	return nil
 }
 
-func (s *AuthService) logUserLogin(userID int64, sessionID string, loginType int, loginIP string, userAgent string) {
-	config.DB.Exec(
-		"INSERT INTO user_login_log_tab (user_id, login_type, login_ip, user_agent, session_id) VALUES (?, ?, ?, ?, ?)",
-		userID, loginType, loginIP, userAgent, sessionID,
+// ResetPassword 重置密码
+func (s *AuthService) ResetPassword(token, newPassword string) error {
+	// 1. 验证token
+	var userID int64
+	var expiresAt int64
+	var used int
+	err := config.DB.QueryRow(
+		"SELECT user_id, expires_at, used FROM password_reset_tokens_tab WHERE token = ?",
+		token,
+	).Scan(&userID, &expiresAt, &used)
+
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("无效的重置token")
+	}
+	if err != nil {
+		return err
+	}
+
+	// 2. 检查token是否已使用
+	if used == 1 {
+		return fmt.Errorf("该重置链接已使用")
+	}
+
+	// 3. 检查token是否过期
+	if utils.GetCurrentTimestamp() > expiresAt {
+		return fmt.Errorf("重置链接已过期")
+	}
+
+	// 4. 验证新密码
+	if len(newPassword) < 6 {
+		return fmt.Errorf("密码长度至少为6位")
+	}
+
+	// 5. 加密新密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	// 6. 更新用户密码
+	mtime := utils.GetCurrentTimestamp()
+	_, err = config.DB.Exec(
+		"UPDATE users_tab SET password = ?, mtime = ? WHERE id = ?",
+		string(hashedPassword), mtime, userID,
 	)
+	if err != nil {
+		return err
+	}
+
+	// 7. 标记token为已使用
+	_, err = config.DB.Exec(
+		"UPDATE password_reset_tokens_tab SET used = 1 WHERE token = ?",
+		token,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 8. 删除该用户的所有会话（强制重新登录）
+	_, err = config.DB.Exec("DELETE FROM sessions_tab WHERE user_id = ?", userID)
+	if err != nil {
+		log.Printf("Failed to delete sessions after password reset: %v", err)
+	}
+
+	return nil
 }
 
-func (s *AuthService) hashPasswordWithSalt(passwordHash string, salt string) string {
-	combined := passwordHash + salt
-	hash := md5.Sum([]byte(combined))
-	return hex.EncodeToString(hash[:])
+// ChangePassword 修改密码（需要验证旧密码）
+func (s *AuthService) ChangePassword(userID int64, oldPassword, newPassword string) error {
+	// 1. 获取用户当前密码
+	var currentPassword string
+	err := config.DB.QueryRow(
+		"SELECT password FROM users_tab WHERE id = ?",
+		userID,
+	).Scan(&currentPassword)
+
+	if err != nil {
+		return fmt.Errorf("用户不存在")
+	}
+
+	// 2. 验证旧密码
+	if err := bcrypt.CompareHashAndPassword([]byte(currentPassword), []byte(oldPassword)); err != nil {
+		return fmt.Errorf("原密码错误")
+	}
+
+	// 3. 验证新密码
+	if len(newPassword) < 6 {
+		return fmt.Errorf("新密码长度至少为6位")
+	}
+
+	// 4. 加密新密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	// 5. 更新密码
+	mtime := utils.GetCurrentTimestamp()
+	_, err = config.DB.Exec(
+		"UPDATE users_tab SET password = ?, mtime = ? WHERE id = ?",
+		string(hashedPassword), mtime, userID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// 6. 删除该用户的其他会话（保留当前会话需要前端传sessionID，这里简单处理）
+	// TODO: 可以改进为保留当前会话
+	
+	return nil
 }
 
-func (s *AuthService) generateSalt() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+func (s *AuthService) isValidEmail(email string) bool {
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
+}
+
+func (s *AuthService) generateUsernameFromEmail(email string) string {
+	re := regexp.MustCompile(`^([^@]+)@`)
+	matches := re.FindStringSubmatch(email)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return "user"
+}
+
+func (s *AuthService) ensureUniqueUsername(username string) string {
+	var count int
+	err := config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE username = ?", username).Scan(&count)
+	if err != nil || count == 0 {
+		return username
+	}
+
+	// 添加数字后缀
+	for i := 1; i < 1000; i++ {
+		newUsername := fmt.Sprintf("%s%d", username, i)
+		err := config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE username = ?", newUsername).Scan(&count)
+		if err == nil && count == 0 {
+			return newUsername
+		}
+	}
+
+	return username
 }
 
 func (s *AuthService) generateSessionID() string {
@@ -375,36 +422,3 @@ func (s *AuthService) generateResetToken() string {
 	return hex.EncodeToString(b)
 }
 
-func (s *AuthService) isValidEmail(email string) bool {
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
-	return emailRegex.MatchString(email)
-}
-
-func (s *AuthService) generateUsernameFromEmail(email string) string {
-	parts := regexp.MustCompile(`[@.]`).Split(email, -1)
-	if len(parts) > 0 {
-		return parts[0]
-	}
-	return "user"
-}
-
-func (s *AuthService) ensureUniqueUsername(username string) string {
-	var count int
-	config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE username = ?", username).Scan(&count)
-	
-	if count == 0 {
-		return username
-	}
-
-	for i := 1; i < 10000; i++ {
-		testUsername := fmt.Sprintf("%s%d", username, i)
-		config.DB.QueryRow("SELECT COUNT(*) FROM users_tab WHERE username = ?", testUsername).Scan(&count)
-		if count == 0 {
-			return testUsername
-		}
-	}
-
-	b := make([]byte, 4)
-	rand.Read(b)
-	return fmt.Sprintf("%s_%s", username, hex.EncodeToString(b))
-}

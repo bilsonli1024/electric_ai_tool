@@ -24,7 +24,7 @@ type GenerateImageRequest struct {
 	AspectRatio   string   `json:"aspectRatio"`
 	ProductImages []string `json:"productImages"`
 	StyleRefImage string   `json:"styleRefImage,omitempty"`
-	Model         string   `json:"model,omitempty"`
+	Model         int      `json:"model,omitempty"` // INT类型：1=Gemini, 2=GPT, 3=DeepSeek
 }
 
 type EditImageRequest struct {

@@ -1,150 +1,67 @@
 package models
 
-import "time"
-
+// User 用户
 type User struct {
-	ID           int64      `json:"id"`
-	Username     string     `json:"username"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	Salt         string     `json:"-"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	LastLoginAt  *time.Time `json:"last_login_at"`
-	Status       int        `json:"status"`
+	ID         int64  `json:"id"`
+	Email      string `json:"email"`
+	Password   string `json:"-"`              // 密码（加密后，不返回给前端）
+	Username   string `json:"username"`
+	UserType   int    `json:"user_type"`      // 用户类型：0=普通用户, 99=管理员
+	UserStatus int    `json:"user_status"`    // 用户状态：0=待审批, 1=正常, 2=已删除
+	Ctime      int64  `json:"ctime"`          // 创建时间(UNIX时间戳)
+	Mtime      int64  `json:"mtime"`          // 更新时间(UNIX时间戳)
 }
 
+// Session 会话
 type Session struct {
-	ID        string    `json:"id"`
-	UserID    int64     `json:"user_id"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string `json:"id"`
+	UserID    int64  `json:"user_id"`
+	ExpiresAt int64  `json:"expires_at"` // 过期时间(UNIX时间戳)
+	Ctime     int64  `json:"ctime"`      // 创建时间(UNIX时间戳)
 }
 
-type PasswordResetToken struct {
-	ID        int64     `json:"id"`
-	UserID    int64     `json:"user_id"`
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Used      bool      `json:"used"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type Task struct {
-	ID             int64      `json:"id"`
-	UserID         int64      `json:"user_id"`
-	SKU            string     `json:"sku,omitempty"`
-	Keywords       string     `json:"keywords,omitempty"`
-	SellingPoints  string     `json:"selling_points,omitempty"`
-	CompetitorLink string     `json:"competitor_link,omitempty"`
-	AnalyzeModel   string     `json:"analyze_model"`
-	GenerateModel  string     `json:"generate_model"`
-	Status         int        `json:"status"`
-	ResultData     string     `json:"result_data,omitempty"`
-	ErrorMessage   string     `json:"error_message,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	Username       string     `json:"username,omitempty"`
-}
-
-const (
-	LegacyTaskStatusAnalyzing      = 0  // 分析中（旧格式，已废弃）
-	LegacyTaskStatusAnalyzed       = 1  // 分析完成（旧格式，已废弃）
-	LegacyTaskStatusGenerating     = 2  // 生成图片中（旧格式，已废弃）
-	LegacyTaskStatusCompleted      = 3  // 已完成（旧格式，已废弃）
-	LegacyTaskStatusAnalyzeFailed  = 10 // 分析失败（旧格式，已废弃）
-	LegacyTaskStatusGenerateFailed = 11 // 生成失败（旧格式，已废弃）
-)
-
-const (
-	ModelGemini   = "gemini"
-	ModelGPT      = "gpt"
-	ModelDeepSeek = "deepseek"
-)
-
-type TaskHistory struct {
-	ID                  int64     `json:"id"`
-	TaskID              int64     `json:"task_id"`
-	UserID              int64     `json:"user_id"`
-	Version             int       `json:"version"`
-	Model               string    `json:"model"`
-	Prompt              string    `json:"prompt,omitempty"`
-	AspectRatio         string    `json:"aspect_ratio,omitempty"`
-	ProductImagesURLs   string    `json:"product_images_urls,omitempty"`
-	StyleRefImageURL    string    `json:"style_ref_image_url,omitempty"`
-	GeneratedImageURL   string    `json:"generated_image_url,omitempty"`
-	EditInstruction     string    `json:"edit_instruction,omitempty"`
-	Status              int       `json:"status"`
-	ErrorMessage        string    `json:"error_message,omitempty"`
-	CreatedAt           time.Time `json:"created_at"`
-}
-
-const (
-	TaskHistoryStatusFailed  = 0 // 失败
-	TaskHistoryStatusSuccess = 1 // 成功
-)
-
-type UserLoginLog struct {
-	ID         int64     `json:"id"`
-	UserID     int64     `json:"user_id"`
-	LoginType  int       `json:"login_type"`
-	LoginIP    string    `json:"login_ip,omitempty"`
-	UserAgent  string    `json:"user_agent,omitempty"`
-	SessionID  string    `json:"session_id,omitempty"`
-	LoginTime  time.Time `json:"login_time"`
-}
-
-const (
-	LoginTypeLogin  = 1 // 登录
-	LoginTypeLogout = 2 // 登出
-	LoginTypeSwitch = 3 // 切换用户
-)
-
-type CDNImage struct {
-	ID               int64     `json:"id"`
-	UserID           int64     `json:"user_id"`
-	OriginalFilename string    `json:"original_filename,omitempty"`
-	CDNURL           string    `json:"cdn_url"`
-	CDNKey           string    `json:"cdn_key"`
-	FileSize         int64     `json:"file_size"`
-	MimeType         string    `json:"mime_type"`
-	ImageType        string    `json:"image_type"`
-	CreatedAt        time.Time `json:"created_at"`
-}
-
+// RegisterRequest 注册请求
 type RegisterRequest struct {
-	Email            string `json:"email"`
-	PasswordHash     string `json:"password_hash"`
-	VerificationCode string `json:"verification_code"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	Username    string `json:"username"`
+	IsAdmin     bool   `json:"is_admin"`      // 是否申请管理员权限
 }
 
+// LoginRequest 登录请求
 type LoginRequest struct {
-	LoginID      string `json:"login_id"`
-	PasswordHash string `json:"password_hash"`
-	LoginIP      string `json:"login_ip,omitempty"`
-	UserAgent    string `json:"user_agent,omitempty"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	LoginIP   string `json:"login_ip,omitempty"`
+	UserAgent string `json:"user_agent,omitempty"`
 }
 
-type ForgotPasswordRequest struct {
-	Email string `json:"email"`
-}
-
-type ResetPasswordRequest struct {
-	Token           string `json:"token"`
-	NewPasswordHash string `json:"new_password_hash"`
-}
-
+// AuthResponse 认证响应
 type AuthResponse struct {
 	User      User   `json:"user"`
 	SessionID string `json:"session_id"`
 }
 
-type TaskListResponse struct {
-	Data  []Task `json:"data"`
+// UserListResponse 用户列表响应
+type UserListResponse struct {
+	Data  []User `json:"data"`
 	Total int    `json:"total"`
 }
 
-type TaskHistoryListResponse struct {
-	Data  []TaskHistory `json:"data"`
-	Total int           `json:"total"`
+// ForgotPasswordRequest 忘记密码请求
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
 }
+
+// ResetPasswordRequest 重置密码请求
+type ResetPasswordRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+// ChangePasswordRequest 修改密码请求
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+

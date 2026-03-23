@@ -22,6 +22,7 @@ export const ImageGenerationPage: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<string>('');
+  const [detailStatus, setDetailStatus] = useState<string>('pending'); // 详细状态
   const [generatedImageUrls, setGeneratedImageUrls] = useState<string[]>([]);
   const [isLoadingTask, setIsLoadingTask] = useState(false);
 
@@ -38,16 +39,16 @@ export const ImageGenerationPage: React.FC = () => {
   // 轮询任务状态
   useEffect(() => {
     // 只有在生成中才轮询
-    if (!currentTaskId || !isGenerating || taskStatus === 'completed' || taskStatus === 'failed') {
+    if (!currentTaskId || !isGenerating || detailStatus === 'completed' || detailStatus === 'failed') {
       return;
     }
 
     const pollInterval = setInterval(() => {
       pollTaskStatus(currentTaskId);
-    }, 3000); // 每3秒轮询一次
+    }, 10000); // 每10秒轮询一次
 
     return () => clearInterval(pollInterval);
-  }, [currentTaskId, isGenerating, taskStatus]);
+  }, [currentTaskId, isGenerating, detailStatus]);
 
   const loadTaskDetail = async (taskId: string) => {
     setIsLoadingTask(true);
@@ -73,15 +74,18 @@ export const ImageGenerationPage: React.FC = () => {
       // 设置任务状态
       setCurrentTaskId(taskId);
       setTaskStatus(detail.task_status);
+      setDetailStatus(imageDetail.detail_status || 'pending');
       
       // 如果已完成，显示结果
-      if (detail.task_status === 'completed' && imageDetail.generated_image_urls) {
+      if (imageDetail.detail_status === 'completed' && imageDetail.generated_image_urls) {
         const urls = imageDetail.generated_image_urls.split(',').filter((url: string) => url.trim());
         setGeneratedImageUrls(urls);
+        // 跳转到结果页
+        navigate(`/image-generation/result?task_id=${taskId}`);
       }
       
       // 如果正在生成，开始轮询
-      if (detail.task_status === 'ongoing') {
+      if (imageDetail.detail_status === 'generating') {
         setIsGenerating(true);
       }
       
@@ -99,8 +103,9 @@ export const ImageGenerationPage: React.FC = () => {
       const imageDetail = detail.detail_data as any;
       
       setTaskStatus(detail.task_status);
+      setDetailStatus(imageDetail.detail_status || 'pending');
       
-      if (detail.task_status === 'completed') {
+      if (imageDetail.detail_status === 'completed') {
         setIsGenerating(false);
         if (imageDetail.generated_image_urls) {
           const urls = imageDetail.generated_image_urls.split(',').filter((url: string) => url.trim());
@@ -109,9 +114,9 @@ export const ImageGenerationPage: React.FC = () => {
           navigate(`/image-generation/result?task_id=${taskId}`);
         }
         setToast({ message: '图片生成成功！', type: 'success' });
-      } else if (detail.task_status === 'failed') {
+      } else if (imageDetail.detail_status === 'failed') {
         setIsGenerating(false);
-        setToast({ message: '图片生成失败: ' + (imageDetail.error_message || '未知错误'), type: 'error' });
+        setToast({ message: '图片生成失败: ' + (imageDetail.fail_msg || imageDetail.error_message || '未知错误'), type: 'error' });
       }
     } catch (error: any) {
       console.error('Failed to poll task status:', error);
@@ -437,7 +442,7 @@ export const ImageGenerationPage: React.FC = () => {
 
             <button 
               onClick={handleGenerateImages}
-              disabled={isGenerating || taskStatus === 'completed'}
+              disabled={isGenerating || detailStatus === 'completed'}
               className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isGenerating ? (
@@ -445,7 +450,7 @@ export const ImageGenerationPage: React.FC = () => {
                   <Loader2 className="animate-spin" />
                   正在生成中...
                 </>
-              ) : taskStatus === 'completed' ? (
+              ) : detailStatus === 'completed' ? (
                 <>
                   已完成
                 </>
@@ -457,7 +462,7 @@ export const ImageGenerationPage: React.FC = () => {
               )}
             </button>
             
-            {taskStatus === 'completed' && (
+            {detailStatus === 'completed' && (
               <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-xl text-center">
                 <p className="text-green-800 font-semibold">此任务已完成</p>
                 <button

@@ -11,7 +11,6 @@ import (
 type CopywritingDomain struct {
 	copywritingService     *services.CopywritingService
 	authService            *services.AuthService
-	unifiedTaskService     *services.UnifiedTaskService
 	taskCenterService      *services.TaskCenterService
 	copywritingTaskService *services.CopywritingTaskService
 }
@@ -19,14 +18,12 @@ type CopywritingDomain struct {
 func NewCopywritingDomain(
 	copywritingService *services.CopywritingService,
 	authService *services.AuthService,
-	unifiedTaskService *services.UnifiedTaskService,
 	taskCenterService *services.TaskCenterService,
 	copywritingTaskService *services.CopywritingTaskService,
 ) *CopywritingDomain {
 	return &CopywritingDomain{
 		copywritingService:     copywritingService,
 		authService:            authService,
-		unifiedTaskService:     unifiedTaskService,
 		taskCenterService:      taskCenterService,
 		copywritingTaskService: copywritingTaskService,
 	}
@@ -36,7 +33,6 @@ func (d *CopywritingDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddle
 	copywritingHandler := handlers.NewCopywritingHandler(
 		d.copywritingService,
 		d.authService,
-		d.unifiedTaskService,
 		d.taskCenterService,
 		d.copywritingTaskService,
 	)

@@ -1,91 +1,68 @@
-# 数据库迁移文件说明
+# Database Migrations
 
-## 文件结构
+## 当前架构
 
-```
-migrations/
-├── schema.sql                          # 完整的数据库结构（用于新安装）
-└── migrate_YYYYMMDDHHMMSS_*.sql       # 增量迁移文件（按时间戳排序）
-```
+本项目使用单一的 `schema.sql` 文件管理数据库结构。
 
-## 使用方法
+### 文件说明
 
-### 1. 新项目初始化
+- **`schema.sql`** - 完整的数据库结构定义
+  - 包含所有表的DDL
+  - 包含初始数据（管理员用户、默认角色权限）
+  - 使用INT枚举和INT时间戳
 
-对于全新的项目，直接执行 schema.sql：
+### 初始化数据库
 
-```bash
-mysql -u root -p < migrations/schema.sql
-```
-
-### 2. 已有项目迁移
-
-对于已有数据的项目，按时间戳顺序执行迁移文件：
+使用初始化脚本：
 
 ```bash
-# 查看当前需要执行的迁移文件
-ls -1 migrations/migrate_*.sql
-
-# 逐个执行迁移（或使用脚本批量执行）
-mysql -u root -p electric_ai_tool < migrations/migrate_20260321103751_fix_competitor_link_length.sql
+cd go_server
+chmod +x init_db.sh
+./init_db.sh
 ```
 
-### 3. 自动执行所有迁移
+⚠️ **警告**: 此操作会删除并重建整个数据库，所有数据将丢失！
 
-使用提供的迁移脚本：
+### 手动初始化
 
 ```bash
-cd /path/to/go_server
-./run_migrations.sh
+mysql -u root -p electric_ai_tool < migrations/schema.sql
 ```
 
-## 迁移文件命名规范
+### 数据库架构特点
 
-所有迁移文件必须遵循以下命名规范：
+1. **INT枚举**: 所有状态字段使用INT类型
+2. **INT时间戳**: 所有时间字段使用UNIX时间戳
+3. **统一命名**: 创建时间=ctime, 更新时间=mtime
+4. **RBAC**: 完整的基于角色的权限管理
+5. **任务中心**: 统一的任务管理架构
 
-```
-migrate_YYYYMMDDHHMMSS_description.sql
-```
+### 默认数据
 
-- `YYYYMMDDHHMMSS`: 时间戳（年月日时分秒）
-- `description`: 简短的英文描述，使用下划线分隔单词
+- 管理员用户: `admin@gmail.com` / `123456`
+- 默认角色: 超级管理员、普通用户
+- 默认权限: 完整的权限树
 
-示例：
-- `migrate_20260321103751_fix_competitor_link_length.sql`
-- `migrate_20260322120000_add_user_avatar_field.sql`
+### 枚举值说明
 
-## 迁移文件内容规范
+所有枚举值定义在 `go_server/models/enums.go`
 
-每个迁移文件应该包含：
+主要枚举：
+- 用户类型: 0=普通用户, 99=管理员
+- 用户状态: 0=待审批, 1=正常, 2=已删除
+- 任务类型: 1=文案生成, 2=图片生成
+- 任务状态: 0=待处理, 1=进行中, 2=已完成, 3=失败
+- AI模型: 1=Gemini, 2=GPT, 3=DeepSeek
 
-1. **注释块**：说明迁移目的、原因和日期
-2. **USE 语句**：确保在正确的数据库中执行
-3. **DDL 语句**：实际的数据库变更操作
+### 注意事项
 
-示例：
+1. 这是一个破坏性更新，会删除所有现有数据
+2. 确保在执行前备份重要数据
+3. 初始化后务必修改管理员密码
+4. 生产环境请谨慎操作
 
-```sql
--- 迁移: 添加用户头像字段
--- 原因: 支持用户个性化头像功能
--- 日期: 2026-03-22 12:00:00
+### 相关文档
 
-USE electric_ai_tool;
-
-ALTER TABLE users_tab 
-ADD COLUMN avatar_url VARCHAR(512) COMMENT '用户头像URL';
-```
-
-## 注意事项
-
-1. **不要修改已执行的迁移文件**：迁移文件一旦执行到生产环境，就不应该再修改
-2. **保持顺序性**：迁移文件必须按时间戳顺序执行
-3. **测试迁移**：在生产环境执行前，先在测试环境验证
-4. **备份数据**：执行迁移前务必备份数据库
-5. **向下兼容**：尽量保持数据结构的向下兼容性
-
-## 已执行的迁移
-
-### migrate_20260321103751_fix_competitor_link_length.sql
-- **日期**: 2026-03-21 10:37:51
-- **描述**: 修改 tasks_tab 表的 competitor_link 字段类型从 VARCHAR(512) 改为 TEXT
-- **原因**: VARCHAR(512) 不足以存储长URL
+- `../IMPLEMENTATION_COMPLETE.md` - 完整实现说明
+- `../QUICK_START.md` - 快速开始指南
+- `../REFACTOR_SUMMARY.md` - 重构总结

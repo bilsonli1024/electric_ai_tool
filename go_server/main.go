@@ -59,12 +59,8 @@ func main() {
 	multiModelService := services.NewMultiModelService(client)
 	authService := services.NewAuthService()
 	emailService := services.NewEmailService()
-	taskService := services.NewTaskService()
-	taskHistoryService := services.NewTaskHistoryService()
-	cdnService := services.NewCDNService()
 	copywritingService := services.NewCopywritingService(multiModelService)
 	rbacService := services.NewRBACService()
-	unifiedTaskService := services.NewUnifiedTaskService()
 	localStorageService := services.NewLocalStorageService()
 	
 	// 新任务中心相关服务
@@ -102,13 +98,13 @@ func main() {
 	authDomain := domain.NewAuthDomain(authService, emailService)
 	authDomain.RegisterRoutes(authMiddleware)
 
-	taskDomain := domain.NewTaskDomain(multiModelService, taskService, taskHistoryService, cdnService, authService, unifiedTaskService, taskCenterService, imageTaskService, localStorageService)
+	taskDomain := domain.NewTaskDomain(multiModelService, authService, taskCenterService, imageTaskService, localStorageService)
 	taskDomain.RegisterRoutes(authMiddleware)
 
 	modelDomain := domain.NewModelDomain(multiModelService)
 	modelDomain.RegisterRoutes(authMiddleware)
 
-	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService, unifiedTaskService, taskCenterService, copywritingTaskService)
+	copywritingDomain := domain.NewCopywritingDomain(copywritingService, authService, taskCenterService, copywritingTaskService)
 	copywritingDomain.RegisterRoutes(authMiddleware)
 
 	// 任务中心（新架构）
@@ -119,9 +115,9 @@ func main() {
 	uploadDomain := domain.NewUploadDomain(localStorageService, authService)
 	uploadDomain.RegisterRoutes(authMiddleware)
 
-	// 统一任务管理（旧架构，待废弃）
-	unifiedTaskDomain := domain.NewUnifiedTaskDomain(unifiedTaskService, authService)
-	unifiedTaskDomain.RegisterRoutes(authMiddleware)
+	// 枚举API
+	enumDomain := domain.NewEnumDomain()
+	enumDomain.RegisterRoutes(authMiddleware)
 
 	// Static file serving
 	distPath := filepath.Join(execDir, "../web/dist")

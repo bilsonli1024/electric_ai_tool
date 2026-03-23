@@ -72,6 +72,8 @@ export const CopywritingGenerator: React.FC = () => {
   const [result, setResult] = useState<GeneratedCopy | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isLoadingTask, setIsLoadingTask] = useState(false);
+  const [detailStatus, setDetailStatus] = useState<string>('pending'); // 详细状态
+  const [taskStatus, setTaskStatus] = useState<string>('pending'); // 任务中心状态
 
   // 从URL参数加载任务
   useEffect(() => {
@@ -82,6 +84,76 @@ export const CopywritingGenerator: React.FC = () => {
       loadTaskDetail(taskIdParam);
     }
   }, [location.search]);
+
+  // 轮询任务状态（当任务处于进行中时）
+  useEffect(() => {
+    if (!taskId) return;
+    if (detailStatus !== 'analyzing' && detailStatus !== 'generating') return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await apiClient.getTaskCenterDetail(taskId);
+        const detail = response.data;
+        const copyDetail = detail.detail_data as any;
+        const newDetailStatus = copyDetail.detail_status || 'pending';
+        
+        setDetailStatus(newDetailStatus);
+        setTaskStatus(detail.task_status);
+        
+        // analyzing -> analyzed: 跳转到配置页
+        if (detailStatus === 'analyzing' && newDetailStatus === 'analyzed') {
+          setIsAnalyzing(false);
+          
+          // 重新加载任务详情
+          if (copyDetail.analysis_result) {
+            try {
+              const analysisData = JSON.parse(copyDetail.analysis_result);
+              setAnalysis(analysisData);
+              
+              // 默认全选
+              setSelectedKeywords(analysisData.keywords?.map((k: Keyword) => k.original) || []);
+              setSelectedSellingPoints(analysisData.sellingPoints?.map((p: BilingualText) => p.original) || []);
+              setSelectedReviewInsights(analysisData.reviewInsights?.map((i: BilingualText) => i.original) || []);
+              setSelectedImageInsights(analysisData.imageInsights?.map((i: BilingualText) => i.original) || []);
+            } catch (e) {
+              console.error('Failed to parse analysis result:', e);
+            }
+          }
+          
+          setStep('configuration');
+        }
+        
+        // generating -> completed: 跳转到结果页
+        if (detailStatus === 'generating' && newDetailStatus === 'completed') {
+          setIsGenerating(false);
+          
+          // 重新加载生成的文案
+          if (copyDetail.generated_copy) {
+            try {
+              const copy = JSON.parse(copyDetail.generated_copy);
+              setResult(copy);
+            } catch (e) {
+              console.error('Failed to parse generated copy:', e);
+            }
+          }
+          
+          setStep('result');
+        }
+        
+        // 任何失败状态
+        if (newDetailStatus === 'failed') {
+          setIsAnalyzing(false);
+          setIsGenerating(false);
+          alert('任务执行失败: ' + (copyDetail.fail_msg || copyDetail.error_message || '未知错误'));
+        }
+        
+      } catch (error) {
+        console.error('Failed to poll task status:', error);
+      }
+    }, 10000); // 10秒轮询
+
+    return () => clearInterval(pollInterval);
+  }, [taskId, detailStatus]);
 
   const loadTaskDetail = async (taskIdToLoad: string) => {
     setIsLoadingTask(true);
@@ -98,6 +170,8 @@ export const CopywritingGenerator: React.FC = () => {
       
       // 设置基本信息
       setTaskId(detail.task_id);
+      setTaskStatus(detail.task_status);
+      setDetailStatus(copyDetail.detail_status || 'pending');
       setSelectedModel(copyDetail.analyze_model || 'gemini');
       
       // 设置任务名称
@@ -124,10 +198,10 @@ export const CopywritingGenerator: React.FC = () => {
           // 如果有用户选择的数据，使用用户选择的；否则使用分析出的全部数据
           if (copyDetail.user_selected_data) {
             const selectedData = JSON.parse(copyDetail.user_selected_data);
-            setSelectedKeywords(selectedData.keywords || []);
-            setSelectedSellingPoints(selectedData.sellingPoints || []);
-            setSelectedReviewInsights(selectedData.reviewInsights || []);
-            setSelectedImageInsights(selectedData.imageInsights || []);
+            setSelectedKeywords(selectedData.selectedKeywords || []);
+            setSelectedSellingPoints(selectedData.selectedSellingPoints || []);
+            setSelectedReviewInsights(selectedData.selectedReviewInsights || []);
+            setSelectedImageInsights(selectedData.selectedImageInsights || []);
           } else {
             // 默认全选
             setSelectedKeywords(analysisData.keywords?.map((k: Keyword) => k.original) || []);
@@ -160,19 +234,27 @@ export const CopywritingGenerator: React.FC = () => {
         }
       }
       
-      // 根据任务状态设置步骤
-      if (detail.task_status === 'pending') {
+      // 根据详细状态设置步骤和加载状态
+      const currentDetailStatus = copyDetail.detail_status || 'pending';
+      if (currentDetailStatus === 'pending') {
         setStep('competitors');
-      } else if (detail.task_status === 'ongoing') {
-        if (copyDetail.analysis_result && !copyDetail.generated_copy) {
+      } else if (currentDetailStatus === 'analyzing') {
+        setStep('competitors');
+        setIsAnalyzing(true);
+      } else if (currentDetailStatus === 'analyzed') {
+        setStep('configuration');
+      } else if (currentDetailStatus === 'generating') {
+        setStep('configuration');
+        setIsGenerating(true);
+      } else if (currentDetailStatus === 'completed') {
+        setStep('result');
+      } else if (currentDetailStatus === 'failed') {
+        // 根据有无分析结果判断失败阶段
+        if (copyDetail.analysis_result) {
           setStep('configuration');
-        } else if (copyDetail.generated_copy) {
-          setStep('result');
         } else {
           setStep('competitors');
         }
-      } else if (detail.task_status === 'completed') {
-        setStep('result');
       }
       
     } catch (error: any) {
@@ -409,7 +491,7 @@ ${result.searchTerms}
 
             <button
               onClick={handleAnalyze}
-              disabled={isAnalyzing || competitorUrls.every(u => !u.trim())}
+              disabled={isAnalyzing || competitorUrls.every(u => !u.trim()) || (detailStatus !== 'pending' && detailStatus !== 'failed')}
               className="w-full py-4 bg-gradient-to-r from-orange-600 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-orange-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 shadow-lg"
             >
               {isAnalyzing ? (
@@ -608,13 +690,18 @@ ${result.searchTerms}
               </button>
               <button
                 onClick={handleGenerate}
-                disabled={isGenerating}
+                disabled={isGenerating || detailStatus === 'completed' || detailStatus === 'analyzing'}
                 className="flex-[2] py-4 bg-gradient-to-r from-orange-600 to-pink-600 text-white rounded-xl font-bold text-lg hover:from-orange-700 hover:to-pink-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg"
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="animate-spin" />
                     正在生成文案...
+                  </>
+                ) : detailStatus === 'completed' ? (
+                  <>
+                    <CheckCircle2 size={20} />
+                    已完成
                   </>
                 ) : (
                   <>

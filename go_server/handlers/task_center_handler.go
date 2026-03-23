@@ -90,11 +90,15 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 	// 筛选条件
 	if taskType := query.Get("task_type"); taskType != "" {
-		filter.TaskType = taskType
+		if tt, err := strconv.Atoi(taskType); err == nil {
+			filter.TaskType = tt
+		}
 	}
 
 	if taskStatus := query.Get("task_status"); taskStatus != "" {
-		filter.TaskStatus = taskStatus
+		if ts, err := strconv.Atoi(taskStatus); err == nil {
+			filter.TaskStatus = ts
+		}
 	}
 	
 	if operator := query.Get("operator"); operator != "" {
@@ -121,9 +125,9 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 查询任务
-	tasks, total, err := h.taskCenterService.GetTasks(filter)
+	tasks, total, err := h.taskCenterService.ListTasks(filter)
 	if err != nil {
-		log.Printf("GetTasks error: %v", err)
+		log.Printf("ListTasks error: %v", err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
@@ -187,7 +191,7 @@ func (h *TaskCenterHandler) GetTaskStatistics(w http.ResponseWriter, r *http.Req
 
 	// 统计不同状态的任务数量
 	stats := make(map[string]int)
-	statuses := []string{
+	statuses := []int{
 		models.TaskStatusPending,
 		models.TaskStatusOngoing,
 		models.TaskStatusCompleted,
@@ -200,12 +204,12 @@ func (h *TaskCenterHandler) GetTaskStatistics(w http.ResponseWriter, r *http.Req
 			TaskStatus: status,
 			Limit:      1,
 		}
-		_, total, err := h.taskCenterService.GetTasks(filter)
+		_, total, err := h.taskCenterService.ListTasks(filter)
 		if err != nil {
-			log.Printf("GetTaskStatistics error for status %s: %v", status, err)
+			log.Printf("GetTaskStatistics error for status %d: %v", status, err)
 			continue
 		}
-		stats[status] = total
+		stats[models.TaskStatusToString(status)] = total
 	}
 
 	utils.RespondJSON(w, map[string]interface{}{
@@ -232,9 +236,15 @@ func (h *TaskCenterHandler) CopyTask(w http.ResponseWriter, r *http.Request) {
 		sessionID = sessionID[7:]
 	}
 
-	user, err := h.authService.ValidateSession(sessionID)
+	userID, err := h.authService.ValidateSession(sessionID)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.authService.GetUserByID(userID)
+	if err != nil {
+		utils.RespondError(w, fmt.Errorf("failed to get user info"), http.StatusUnauthorized)
 		return
 	}
 

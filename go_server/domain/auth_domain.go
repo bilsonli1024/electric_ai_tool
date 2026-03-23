@@ -29,6 +29,7 @@ func (d *AuthDomain) RegisterRoutes(authMiddleware *middleware.AuthMiddleware) {
 	http.HandleFunc("/api/auth/me", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(authHandler.Me))))
 	http.HandleFunc("/api/auth/forgot-password", middleware.LoggingMiddleware(middleware.CORS(authHandler.ForgotPassword)))
 	http.HandleFunc("/api/auth/reset-password", middleware.LoggingMiddleware(middleware.CORS(authHandler.ResetPassword)))
+	http.HandleFunc("/api/auth/change-password", middleware.LoggingMiddleware(middleware.CORS(authMiddleware.RequireAuth(authHandler.ChangePassword))))
 	http.HandleFunc("/api/auth/send-verification-code", middleware.LoggingMiddleware(middleware.CORS(authHandler.SendVerificationCode)))
 	http.HandleFunc("/api/auth/test-send-verification-code", middleware.LoggingMiddleware(middleware.CORS(authHandler.TestSendVerificationCode)))
 }

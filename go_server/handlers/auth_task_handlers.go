@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"electric_ai_tool/go_server/models"
@@ -38,30 +37,18 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.VerificationCode == "" {
-		utils.RespondError(w, fmt.Errorf("verification code is required"), http.StatusBadRequest)
-		return
-	}
-
-	valid, err := h.emailService.VerifyCode(req.Email, req.VerificationCode, "register")
-	if err != nil || !valid {
-		utils.RespondError(w, fmt.Errorf("invalid or expired verification code"), http.StatusBadRequest)
-		return
-	}
-
-	user, err := h.authService.Register(req)
+	// 注册用户（不自动登录）
+	err := h.authService.Register(req)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusBadRequest)
 		return
 	}
 
-	sessionID, err := h.authService.CreateSession(user.ID)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	utils.RespondJSON(w, models.AuthResponse{User: *user, SessionID: sessionID})
+	// 返回成功消息，提示等待审批
+	utils.RespondJSON(w, map[string]interface{}{
+		"message": "注册成功，请等待管理员审批后登录",
+		"success": true,
+	})
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +84,13 @@ func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.authService.ForgotPassword(req)
+	if req.Email == "" {
+		utils.RespondError(w, fmt.Errorf("邮箱不能为空"), http.StatusBadRequest)
+		return
+	}
+
+	// 发送重置邮件
+	err := h.authService.ForgotPassword(req.Email)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
@@ -120,13 +113,58 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.authService.ResetPassword(req)
+	if req.Token == "" || req.NewPassword == "" {
+		utils.RespondError(w, fmt.Errorf("token和新密码不能为空"), http.StatusBadRequest)
+		return
+	}
+
+	// 重置密码
+	err := h.authService.ResetPassword(req.Token, req.NewPassword)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusBadRequest)
 		return
 	}
 
-	utils.RespondJSON(w, map[string]string{"message": "密码重置成功"})
+	utils.RespondJSON(w, map[string]string{
+		"message": "密码重置成功，请重新登录",
+	})
+}
+
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 获取用户ID
+	userIDValue := r.Context().Value("user_id")
+	if userIDValue == nil {
+		utils.RespondError(w, fmt.Errorf("unauthorized"), http.StatusUnauthorized)
+		return
+	}
+	userID := userIDValue.(int64)
+
+	var req models.ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	if req.OldPassword == "" || req.NewPassword == "" {
+		utils.RespondError(w, fmt.Errorf("旧密码和新密码不能为空"), http.StatusBadRequest)
+		return
+	}
+
+	// 修改密码
+	err := h.authService.ChangePassword(userID, req.OldPassword, req.NewPassword)
+	if err != nil {
+		utils.RespondError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	utils.RespondJSON(w, map[string]string{
+		"message": "密码修改成功",
+	})
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -227,28 +265,19 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 type TaskHandler struct {
 	multiModelService   *services.MultiModelService
-	taskService         *services.TaskService
-	taskHistoryService  *services.TaskHistoryService
-	cdnService          *services.CDNService
 	authService         *services.AuthService
-	unifiedTaskService  *services.UnifiedTaskService
 	taskCenterService   *services.TaskCenterService
 	imageTaskService    *services.ImageTaskService
 	localStorageService *services.LocalStorageService
 }
 
-func NewTaskHandler(multiModelService *services.MultiModelService, taskService *services.TaskService,
-	taskHistoryService *services.TaskHistoryService, cdnService *services.CDNService,
-	authService *services.AuthService, unifiedTaskService *services.UnifiedTaskService,
+func NewTaskHandler(multiModelService *services.MultiModelService,
+	authService *services.AuthService,
 	taskCenterService *services.TaskCenterService, imageTaskService *services.ImageTaskService,
 	localStorageService *services.LocalStorageService) *TaskHandler {
 	return &TaskHandler{
 		multiModelService:   multiModelService,
-		taskService:         taskService,
-		taskHistoryService:  taskHistoryService,
-		cdnService:          cdnService,
 		authService:         authService,
-		unifiedTaskService:  unifiedTaskService,
 		taskCenterService:   taskCenterService,
 		imageTaskService:    imageTaskService,
 		localStorageService: localStorageService,
@@ -261,7 +290,13 @@ func (h *TaskHandler) getUserIDAndUsername(r *http.Request) (int64, string, erro
 		sessionID = sessionID[7:]
 	}
 
-	user, err := h.authService.ValidateSession(sessionID)
+	userID, err := h.authService.ValidateSession(sessionID)
+	if err != nil {
+		return 0, "", err
+	}
+
+	// 获取用户详细信息
+	user, err := h.authService.GetUserByID(userID)
 	if err != nil {
 		return 0, "", err
 	}
@@ -275,57 +310,19 @@ func (h *TaskHandler) getUserID(r *http.Request) (int64, error) {
 		sessionID = sessionID[7:]
 	}
 
-	user, err := h.authService.ValidateSession(sessionID)
+	userID, err := h.authService.ValidateSession(sessionID)
 	if err != nil {
 		return 0, err
 	}
 
-	return user.ID, nil
+	return userID, nil
 }
 
 func (h *TaskHandler) AnalyzeWithTask(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	userID, err := h.getUserID(r)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusUnauthorized)
-		return
-	}
-
-	var req models.AnalyzeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.RespondError(w, err, http.StatusBadRequest)
-		return
-	}
-
-	if req.Model == "" {
-		req.Model = models.ModelGemini
-	}
-
-	task, err := h.taskService.CreateTask(userID, req.SKU, req.Keywords, req.SellingPoints, req.CompetitorLink, req.Model, models.ModelGemini)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusAnalyzing, nil, "")
-
-	ctx := context.Background()
-	sellingPoints, err := h.multiModelService.AnalyzeSellingPoints(ctx, req)
-	if err != nil {
-		h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusAnalyzeFailed, nil, err.Error())
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	h.taskService.UpdateTaskStatus(task.ID, models.LegacyTaskStatusAnalyzed, sellingPoints, "")
-
-	utils.RespondJSON(w, map[string]interface{}{
-		"data":    sellingPoints,
-		"task_id": task.ID,
+	// 该功能已迁移到新的文案生成API
+	// 请使用 /api/copywriting/analyze
+	utils.RespondJSON(w, map[string]string{
+		"message": "该API已废弃，请使用 /api/copywriting/analyze",
 	})
 }
 
@@ -346,7 +343,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		Keywords             string   `json:"keywords"`
 		SellingPoints        string   `json:"sellingPoints"`
 		CompetitorLink       string   `json:"competitorLink"`
-		Model                string   `json:"model"`
+		Model                int      `json:"model"`
 		TaskName             string   `json:"taskName"`
 		CopywritingTaskID    string   `json:"copywritingTaskId"`
 		ProductImages        []string `json:"productImages"` // 产品图片URL数组
@@ -357,7 +354,7 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if req.Model == "" {
+	if req.Model == 0 {
 		req.Model = models.ModelGemini
 	}
 
@@ -404,16 +401,19 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		
 		ctx := context.Background()
 		
-		log.Printf("Starting image generation for task %s", taskID)
+		utils.LogInfo("Starting image generation for task %s", taskID)
 		
-		// 更新状态为进行中
-		if err := h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusOngoing); err != nil {
-			log.Printf("Failed to update status to ongoing for task %s: %v", taskID, err)
+		// 更新状态为generating（生成中）
+		if err := h.imageTaskService.UpdateDetailStatus(taskID, models.ImageStatusGenerating); err != nil {
+			utils.LogError("Failed to update detail status to generating for task %s: %v", taskID, err)
+		}
+		if err := h.taskCenterService.UpdateTaskStatus(taskID, models.MapDetailStatusToTaskStatus(models.TaskTypeImage, models.ImageStatusGenerating)); err != nil {
+			utils.LogError("Failed to update task status to ongoing for task %s: %v", taskID, err)
 		}
 
 		// 构建AI生成提示词
 		prompt := h.buildImageGenerationPrompt(req.SKU, req.Keywords, req.SellingPoints)
-		log.Printf("Generated prompt for task %s: %s", taskID, prompt)
+		utils.LogInfo("Generated prompt for task %s: %s", taskID, prompt)
 		
 		// 调用AI模型生成图片
 		imageReq := models.GenerateImageRequest{
@@ -423,12 +423,13 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 			ProductImages: req.ProductImages, // 传递产品图片
 		}
 		
-		log.Printf("Calling AI service to generate image for task %s with model %s (product images: %d)", 
+		utils.LogInfo("Calling AI service to generate image for task %s with model %s (product images: %d)", 
 			taskID, req.Model, len(req.ProductImages))
 		generatedDataURL, err := h.multiModelService.GenerateImage(ctx, imageReq)
 		if err != nil {
-			log.Printf("Image generation failed for task %s: %v", taskID, err)
+			utils.LogError("Image generation failed for task %s: %v", taskID, err)
 			h.imageTaskService.SaveError(taskID, err.Error())
+			h.imageTaskService.UpdateDetailStatus(taskID, models.ImageStatusFailed)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 			return
 		}
@@ -436,26 +437,28 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		// 验证返回的数据
 		if generatedDataURL == "" {
 			errMsg := "AI返回了空的图片数据"
-			log.Printf("Image generation failed for task %s: %s", taskID, errMsg)
+			utils.LogError("Image generation failed for task %s: %s", taskID, errMsg)
 			h.imageTaskService.SaveError(taskID, errMsg)
+			h.imageTaskService.UpdateDetailStatus(taskID, models.ImageStatusFailed)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 			return
 		}
 
-		log.Printf("Image generated successfully for task %s, data URL length: %d", taskID, len(generatedDataURL))
+		utils.LogInfo("Image generated successfully for task %s, data URL length: %d", taskID, len(generatedDataURL))
 
 		// 保存图片到本地文件
 		localPath, err := h.localStorageService.SaveGeneratedImage(generatedDataURL)
 		if err != nil {
-			log.Printf("Failed to save image to local storage for task %s: %v", taskID, err)
+			utils.LogError("Failed to save image to local storage for task %s: %v", taskID, err)
 			h.imageTaskService.SaveError(taskID, fmt.Sprintf("Failed to save image: %v", err))
+			h.imageTaskService.UpdateDetailStatus(taskID, models.ImageStatusFailed)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 			return
 		}
 		
 		// 生成访问URL
 		imageURL := h.localStorageService.GetFileURL(localPath)
-		log.Printf("Image saved to local storage: %s, access URL: %s", localPath, imageURL)
+		utils.LogInfo("Image saved to local storage: %s, access URL: %s", localPath, imageURL)
 
 		// 保存结果（同时保存本地路径和访问URL）
 		resultData := map[string]interface{}{
@@ -466,18 +469,20 @@ func (h *TaskHandler) GenerateImageWithTask(w http.ResponseWriter, r *http.Reque
 		}
 		resultJSON, _ := json.Marshal(resultData)
 		
-		log.Printf("Saving result data for task %s", taskID)
+		utils.LogInfo("Saving result data for task %s", taskID)
 		if err := h.imageTaskService.SaveResultData(taskID, string(resultJSON), imageURL); err != nil {
-			log.Printf("Failed to save result for task %s: %v", taskID, err)
+			utils.LogError("Failed to save result for task %s: %v", taskID, err)
+			h.imageTaskService.UpdateDetailStatus(taskID, models.ImageStatusFailed)
 			h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusFailed)
 			return
 		}
 		
 		// 更新状态为已完成
+		h.imageTaskService.UpdateDetailStatus(taskID, models.ImageStatusCompleted)
 		if err := h.taskCenterService.UpdateTaskStatus(taskID, models.TaskStatusCompleted); err != nil {
-			log.Printf("Failed to update status to completed for task %s: %v", taskID, err)
+			utils.LogError("Failed to update status to completed for task %s: %v", taskID, err)
 		}
-		log.Printf("Task %s completed successfully", taskID)
+		utils.LogInfo("Task %s completed successfully", taskID)
 	}()
 }
 
@@ -507,107 +512,24 @@ func (h *TaskHandler) buildImageGenerationPrompt(sku, keywords, sellingPoints st
 }
 
 func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
-	userID, err := h.getUserID(r)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusUnauthorized)
-		return
-	}
-
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-	statusStr := r.URL.Query().Get("status")
-
-	limit := 20
-	offset := 0
-	statusFilter := -1
-
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
-			limit = l
-		}
-	}
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
-			offset = o
-		}
-	}
-	if statusStr != "" {
-		if s, err := strconv.Atoi(statusStr); err == nil {
-			statusFilter = s
-		}
-	}
-
-	tasks, total, err := h.taskService.GetUserTasks(userID, statusFilter, limit, offset)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	utils.RespondJSON(w, models.TaskListResponse{Data: tasks, Total: total})
+	// 该功能已迁移到新的任务中心API
+	// 请使用 /api/task-center/list
+	utils.RespondJSON(w, map[string]string{
+		"message": "该API已废弃，请使用 /api/task-center/list",
+	})
 }
 
 func (h *TaskHandler) GetAllTasks(w http.ResponseWriter, r *http.Request) {
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-
-	limit := 20
-	offset := 0
-
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
-			limit = l
-		}
-	}
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
-			offset = o
-		}
-	}
-
-	tasks, total, err := h.taskService.GetAllTasks(limit, offset)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	utils.RespondJSON(w, models.TaskListResponse{Data: tasks, Total: total})
+	// 该功能已迁移到新的任务中心API
+	// 请使用 /api/task-center/list
+	utils.RespondJSON(w, map[string]string{
+		"message": "该API已废弃，请使用 /api/task-center/list",
+	})
 }
 
 func (h *TaskHandler) GetTaskHistory(w http.ResponseWriter, r *http.Request) {
-	taskIDStr := r.URL.Query().Get("task_id")
-	if taskIDStr == "" {
-		utils.RespondError(w, fmt.Errorf("task_id is required"), http.StatusBadRequest)
-		return
-	}
-
-	taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
-	if err != nil {
-		utils.RespondError(w, fmt.Errorf("invalid task_id"), http.StatusBadRequest)
-		return
-	}
-
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-
-	limit := 20
-	offset := 0
-
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil {
-			limit = l
-		}
-	}
-	if offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
-			offset = o
-		}
-	}
-
-	histories, total, err := h.taskHistoryService.GetTaskHistory(taskID, limit, offset)
-	if err != nil {
-		utils.RespondError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	utils.RespondJSON(w, models.TaskHistoryListResponse{Data: histories, Total: total})
+	// 任务历史功能已废弃
+	utils.RespondJSON(w, map[string]string{
+		"message": "该功能已废弃",
+	})
 }

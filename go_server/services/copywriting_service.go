@@ -23,8 +23,8 @@ func NewCopywritingService(multiModelService *MultiModelService) *CopywritingSer
 	}
 }
 
-func (s *CopywritingService) AnalyzeCompetitors(ctx context.Context, urls []string, model string) (*models.CompetitorAnalysis, error) {
-	if model == "" {
+func (s *CopywritingService) AnalyzeCompetitors(ctx context.Context, urls []string, model int) (*models.CompetitorAnalysis, error) {
+	if model == 0 {
 		model = models.ModelGemini
 	}
 
@@ -137,7 +137,7 @@ Return JSON with this structure:
 }
 
 func (s *CopywritingService) GenerateCopy(ctx context.Context, req models.GenerateCopyRequest) (*models.GeneratedCopy, error) {
-	if req.Model == "" {
+	if req.Model == 0 {
 		req.Model = models.ModelGemini
 	}
 
@@ -241,7 +241,7 @@ func (s *CopywritingService) CreateTask(userID int64, competitorURLs []string, m
 	result, err := db.Exec(
 		`INSERT INTO copywriting_tasks_tab (user_id, task_name, competitor_urls, status, analyze_model, generate_model) 
 		 VALUES (?, ?, ?, ?, ?, ?)`,
-		userID, taskName, string(urlsJSON), models.CopyStatusAnalyzing, model, model,
+		userID, taskName, string(urlsJSON), models.CopywritingStatusAnalyzing, model, model,
 	)
 	if err != nil {
 		return 0, err
@@ -273,7 +273,7 @@ func (s *CopywritingService) SaveAnalysisResult(taskID int64, analysis *models.C
 
 	_, err := db.Exec(
 		`UPDATE copywriting_tasks_tab SET analysis_result = ?, status = ? WHERE id = ?`,
-		string(analysisJSON), models.CopyStatusAnalyzed, taskID,
+		string(analysisJSON), models.CopywritingStatusAnalyzed, taskID,
 	)
 	return err
 }
@@ -289,7 +289,7 @@ func (s *CopywritingService) SaveGeneratedCopy(taskID int64, copy *models.Genera
 
 	_, err := db.Exec(
 		`UPDATE copywriting_tasks_tab SET generated_copy = ?, product_details = ?, status = ? WHERE id = ?`,
-		string(copyJSON), string(detailsJSON), models.CopyStatusCompleted, taskID,
+		string(copyJSON), string(detailsJSON), models.CopywritingStatusCompleted, taskID,
 	)
 	return err
 }
@@ -374,7 +374,7 @@ func (s *CopywritingService) SearchCompletedTasks(userID int64, keyword string, 
 		 ORDER BY created_at DESC LIMIT ?`
 
 	searchPattern := "%" + keyword + "%"
-	rows, err := db.Query(query, userID, models.CopyStatusCompleted, searchPattern, searchPattern, limit)
+	rows, err := db.Query(query, userID, models.CopywritingStatusCompleted, searchPattern, searchPattern, limit)
 	if err != nil {
 		return nil, err
 	}
