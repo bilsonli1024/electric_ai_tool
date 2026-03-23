@@ -8,6 +8,7 @@ import { ModelTest } from './components/ModelTest';
 import { CopywritingGenerator } from './components/CopywritingGenerator';
 import { ImageGenerationPage } from './components/ImageGenerationPage';
 import { ImageGenerationResult } from './components/ImageGenerationResult';
+import ErrorToastContainer from './components/ErrorToastContainer';
 import { apiClient } from './services/api';
 
 type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest';
@@ -183,6 +184,7 @@ export const MainApp: React.FC = () => {
 
   return (
     <BrowserRouter>
+      <ErrorToastContainer />
       <AppContent isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />
     </BrowserRouter>
   );

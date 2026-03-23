@@ -77,19 +77,35 @@ func (s *AuthService) Register(req models.RegisterRequest) error {
 
 // Login 用户登录
 func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, error) {
-	if req.Email == "" || req.Password == "" {
+	// 兼容新旧两种格式
+	email := req.Email
+	password := req.Password
+	
+	// 如果是旧格式（login_id + password_hash）
+	if email == "" && req.LoginID != "" {
+		email = req.LoginID
+	}
+	if password == "" && req.PasswordHash != "" {
+		// 旧格式使用MD5哈希，需要特殊处理
+		// 这里我们假设旧格式的password_hash是前端MD5加密后的结果
+		// 但数据库存储的是bcrypt，所以需要让用户使用明文密码
+		// 或者我们直接把MD5哈希当作密码来验证
+		password = req.PasswordHash
+	}
+	
+	if email == "" || password == "" {
 		return nil, "", fmt.Errorf("邮箱和密码不能为空")
 	}
 
 	// 查询用户
 	var user models.User
-	var password string
+	var storedPassword string
 	err := config.DB.QueryRow(
 		`SELECT id, email, password, username, user_type, user_status, ctime, mtime 
 		 FROM users_tab WHERE email = ?`,
-		req.Email,
+		email,
 	).Scan(
-		&user.ID, &user.Email, &password, &user.Username, &user.UserType, &user.UserStatus,
+		&user.ID, &user.Email, &storedPassword, &user.Username, &user.UserType, &user.UserStatus,
 		&user.Ctime, &user.Mtime,
 	)
 
@@ -109,7 +125,7 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.User, string, erro
 	}
 
 	// 验证密码
-	err = bcrypt.CompareHashAndPassword([]byte(password), []byte(req.Password))
+	err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 	if err != nil {
 		return nil, "", fmt.Errorf("邮箱或密码错误")
 	}

@@ -1,59 +1,53 @@
-import React, { useEffect } from 'react';
-import { X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
-export type ToastType = 'success' | 'error' | 'info';
-
-export interface ToastProps {
+interface ToastProps {
   message: string;
-  type?: ToastType;
+  type?: 'success' | 'error' | 'warning' | 'info';
   duration?: number;
   onClose: () => void;
 }
 
-export const Toast: React.FC<ToastProps> = ({ 
-  message, 
-  type = 'success', 
-  duration = 5000, 
-  onClose 
-}) => {
+const Toast: React.FC<ToastProps> = ({ message, type = 'error', duration = 3000, onClose }) => {
   useEffect(() => {
-    if (duration > 0) {
-      const timer = setTimeout(() => {
-        onClose();
-      }, duration);
-      
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+      onClose();
+    }, duration);
+
+    return () => clearTimeout(timer);
   }, [duration, onClose]);
 
-  const icons = {
-    success: <CheckCircle2 className="w-5 h-5 text-green-500" />,
-    error: <AlertCircle className="w-5 h-5 text-red-500" />,
-    info: <Info className="w-5 h-5 text-blue-500" />,
-  };
+  const bgColor = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    warning: 'bg-yellow-500',
+    info: 'bg-blue-500',
+  }[type];
 
-  const bgColors = {
-    success: 'bg-green-50 border-green-200',
-    error: 'bg-red-50 border-red-200',
-    info: 'bg-blue-50 border-blue-200',
-  };
+  const icon = {
+    success: '✓',
+    error: '✗',
+    warning: '⚠',
+    info: 'ℹ',
+  }[type];
 
   return (
-    <div className={`fixed top-4 right-4 z-50 animate-slide-in-right`}>
-      <div className={`${bgColors[type]} border rounded-lg shadow-lg p-4 pr-10 max-w-md relative`}>
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0">{icons[type]}</div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-gray-900 whitespace-pre-line">{message}</p>
-          </div>
+    <div className="fixed top-4 right-4 z-50 animate-slide-in">
+      <div className={`${bgColor} text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3 min-w-[300px] max-w-[500px]`}>
+        <span className="text-2xl font-bold">{icon}</span>
+        <div className="flex-1">
+          <p className="text-sm font-medium">{message}</p>
         </div>
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 p-1 rounded-full hover:bg-gray-200 transition-colors"
+          className="text-white hover:text-gray-200 transition-colors ml-2"
         >
-          <X className="w-4 h-4 text-gray-500" />
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
       </div>
     </div>
   );
 };
+
+export default Toast;

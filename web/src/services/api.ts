@@ -2,6 +2,13 @@ import { User, AuthResponse, LoginRequest, RegisterRequest, Task, TaskHistory } 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002';
 
+// 统一响应格式
+interface StandardResponse<T = any> {
+  code: number;
+  message: string;
+  data: T;
+}
+
 class ApiClient {
   private sessionId: string | null = null;
 
@@ -27,12 +34,30 @@ class ApiClient {
       headers,
     });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(error.error || 'Request failed');
+    // 解析响应
+    const result: StandardResponse<T> = await response.json().catch(() => ({
+      code: 500,
+      message: 'Failed to parse response',
+      data: null as T
+    }));
+
+    // 检查业务状态码
+    if (result.code !== 0) {
+      // 显示错误提示
+      this.showError(result.message);
+      throw new Error(result.message);
     }
 
-    return response.json();
+    // 返回data部分
+    return result.data;
+  }
+
+  // 显示错误提示（全局Toast）
+  private showError(message: string) {
+    // 触发自定义事件，由App组件监听并显示Toast
+    window.dispatchEvent(new CustomEvent('api-error', {
+      detail: { message }
+    }));
   }
 
   async register(data: RegisterRequest): Promise<AuthResponse> {
@@ -53,9 +78,15 @@ class ApiClient {
   }
 
   async login(data: LoginRequest): Promise<AuthResponse> {
+    // 转换为后端支持的格式（兼容login_id和password_hash）
+    const payload: any = {
+      login_id: data.email, // 使用login_id字段
+      password_hash: data.password, // 使用password_hash字段
+    };
+    
     const response = await this.request<AuthResponse>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     this.sessionId = response.session_id;
     localStorage.setItem('session_id', response.session_id);

@@ -30,10 +30,12 @@ type RegisterRequest struct {
 
 // LoginRequest 登录请求
 type LoginRequest struct {
-	Email     string `json:"email"`
-	Password  string `json:"password"`
-	LoginIP   string `json:"login_ip,omitempty"`
-	UserAgent string `json:"user_agent,omitempty"`
+	Email        string `json:"email"`          // 邮箱（新格式）
+	Password     string `json:"password"`       // 密码明文（新格式）
+	LoginID      string `json:"login_id"`       // 登录ID（兼容旧格式，可以是邮箱）
+	PasswordHash string `json:"password_hash"`  // 密码MD5哈希（兼容旧格式）
+	LoginIP      string `json:"login_ip,omitempty"`
+	UserAgent    string `json:"user_agent,omitempty"`
 }
 
 // AuthResponse 认证响应
