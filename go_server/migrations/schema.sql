@@ -104,6 +104,21 @@ CREATE TABLE password_reset_tokens_tab (
     INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='密码重置token表';
 
+-- 邮箱验证码表
+DROP TABLE IF EXISTS email_verification_codes_tab;
+CREATE TABLE email_verification_codes_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    email VARCHAR(255) NOT NULL COMMENT '邮箱地址',
+    code VARCHAR(10) NOT NULL COMMENT '验证码',
+    purpose VARCHAR(50) NOT NULL COMMENT '用途: register=注册, reset=重置密码',
+    expires_at DATETIME NOT NULL COMMENT '过期时间',
+    used TINYINT NOT NULL DEFAULT 0 COMMENT '是否已使用: 0=未使用, 1=已使用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_email (email),
+    INDEX idx_code (code),
+    INDEX idx_expires_at (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱验证码表';
+
 -- ============================================================================
 -- 任务中心相关表
 -- ============================================================================
