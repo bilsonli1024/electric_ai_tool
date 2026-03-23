@@ -263,16 +263,37 @@ class ApiClient {
   }
 
   async analyzeCompetitors(urls: string[], model?: string, taskName?: string): Promise<{ data: any; task_id: number }> {
+    // 将model名称转换为枚举值
+    const modelMap: { [key: string]: number } = {
+      'gemini': 1,
+      'gpt': 2,
+      'deepseek': 3
+    };
+    
+    const modelValue = model ? (modelMap[model.toLowerCase()] || 1) : 1;
+    
     return this.request('/api/copywriting/analyze', {
       method: 'POST',
-      body: JSON.stringify({ urls, model: model || 'gemini', task_name: taskName }),
+      body: JSON.stringify({ urls, model: modelValue, task_name: taskName }),
     });
   }
 
   async generateCopy(data: any): Promise<{ data: any; task_id: number }> {
+    // 将model名称转换为枚举值
+    const modelMap: { [key: string]: number } = {
+      'gemini': 1,
+      'gpt': 2,
+      'deepseek': 3
+    };
+    
+    const requestData = { ...data };
+    if (data.model && typeof data.model === 'string') {
+      requestData.model = modelMap[data.model.toLowerCase()] || 1;
+    }
+    
     return this.request('/api/copywriting/generate', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(requestData),
     });
   }
 
@@ -296,9 +317,21 @@ class ApiClient {
     copywritingTaskId?: string;
     productImages?: string[]; // 产品图片URL数组
   }): Promise<{ data: any; task_id: string }> {
+    // 将model名称转换为枚举值
+    const modelMap: { [key: string]: number } = {
+      'gemini': 1,
+      'gpt': 2,
+      'deepseek': 3
+    };
+    
+    const modelValue = modelMap[data.model.toLowerCase()] || 1;
+    
     return this.request('/api/tasks/generate-image', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        model: modelValue
+      }),
     });
   }
 

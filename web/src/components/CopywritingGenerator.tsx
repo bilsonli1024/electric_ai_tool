@@ -167,12 +167,21 @@ export const CopywritingGenerator: React.FC = () => {
       }
 
       const copyDetail = detail.detail_data as any;
+      // 将数字model转换为字符串
+      const modelNameMap: { [key: number]: string } = {
+        1: 'gemini',
+        2: 'gpt',
+        3: 'deepseek'
+      };
+      const modelName = typeof copyDetail.analyze_model === 'number' 
+        ? (modelNameMap[copyDetail.analyze_model] || 'gemini')
+        : (copyDetail.analyze_model || 'gemini');
       
       // 设置基本信息
       setTaskId(detail.task_id);
       setTaskStatus(detail.task_status);
       setDetailStatus(copyDetail.detail_status || 'pending');
-      setSelectedModel(copyDetail.analyze_model || 'gemini');
+      setSelectedModel(modelName);
       
       // 设置任务名称
       if (copyDetail.task_name) {

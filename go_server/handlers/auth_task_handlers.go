@@ -254,9 +254,15 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		sessionID = sessionID[7:]
 	}
 
-	user, err := h.authService.ValidateSession(sessionID)
+	userID, err := h.authService.ValidateSession(sessionID)
 	if err != nil {
 		utils.RespondError(w, err, http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.authService.GetUserByID(userID)
+	if err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
 

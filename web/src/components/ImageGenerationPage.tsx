@@ -62,13 +62,22 @@ export const ImageGenerationPage: React.FC = () => {
       }
 
       const imageDetail = detail.detail_data as any;
+      // 将数字model转换为字符串
+      const modelNameMap: { [key: number]: string } = {
+        1: 'gemini',
+        2: 'gpt',
+        3: 'deepseek'
+      };
+      const modelName = typeof imageDetail.generate_model === 'number' 
+        ? (modelNameMap[imageDetail.generate_model] || 'gemini')
+        : (imageDetail.generate_model || 'gemini');
       
       // 恢复表单数据
       setSku(imageDetail.sku || '');
       setKeywords(imageDetail.keywords || '');
       setSellingPoints(imageDetail.selling_points || '');
       setCompetitorLink(imageDetail.competitor_link || '');
-      setSelectedModel(imageDetail.generate_model || 'gemini');
+      setSelectedModel(modelName);
       setSelectedCopywritingTaskId(imageDetail.copywriting_task_id || null);
       
       // 设置任务状态

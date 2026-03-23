@@ -25,21 +25,38 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
   const navigate = useNavigate();
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    loadCurrentUser();
-  }, []);
+    if (isAuthenticated) {
+      loadCurrentUser();
+    }
+  }, [isAuthenticated]);
 
   const loadCurrentUser = async () => {
+    setLoading(true);
     try {
       const user = await apiClient.me();
       setCurrentUser(user);
     } catch (err) {
       console.error('Failed to load current user:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
   const isAdmin = currentUser?.user_type === 99;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          <p className="mt-4 text-gray-600">加载中...</p>
+        </div>
+      </div>
+    );
+  }
   
   const currentPage = (): Page => {
     const path = location.pathname;
