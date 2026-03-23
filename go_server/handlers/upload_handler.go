@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -107,17 +108,38 @@ func (h *UploadHandler) UploadImageBase64(w http.ResponseWriter, r *http.Request
 
 	log.Printf("📤 Uploading base64 image (size: ~%d bytes)", len(req.Image))
 
-	// 使用SaveGeneratedImage方法（它会处理base64解码）
-	relativePath, err := h.localStorageService.SaveGeneratedImage(req.Image)
+	// 解码base64数据
+	imageData, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		log.Printf("Failed to decode base64: %v", err)
+		utils.RespondError(w, fmt.Errorf("invalid base64 data: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// 确定文件名（如果提供了原始文件名）
+	filename := req.Filename
+	if filename == "" {
+		// 从data URL中提取扩展名
+		mimeType := strings.TrimPrefix(parts[0], "data:")
+		mimeType = strings.TrimSuffix(mimeType, ";base64")
+		if strings.Contains(mimeType, "jpeg") || strings.Contains(mimeType, "jpg") {
+			filename = "image.jpg"
+		} else if strings.Contains(mimeType, "png") {
+			filename = "image.png"
+		} else if strings.Contains(mimeType, "webp") {
+			filename = "image.webp"
+		} else {
+			filename = "image.jpg" // 默认
+		}
+	}
+
+	// 使用SaveUploadedImage保存（直接保存到images目录）
+	relativePath, err := h.localStorageService.SaveUploadedImage(imageData, filename)
 	if err != nil {
 		log.Printf("Failed to save base64 image: %v", err)
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
-
-	// 修改路径：从generated移到images目录
-	// 因为这是用户上传的，不是AI生成的
-	relativePath = strings.Replace(relativePath, "generated/", "images/", 1)
 
 	// 生成访问URL
 	imageURL := h.localStorageService.GetFileURL(relativePath)
