@@ -136,7 +136,20 @@ class ApiClient {
   }
 
   async me(): Promise<User> {
-    return this.request<User>('/api/auth/me');
+    const user = await this.request<User>('/api/auth/me');
+    
+    // 获取用户权限
+    try {
+      const permData = await this.request<{ permissions: string[]; is_admin: boolean }>('/api/permissions/my');
+      user.permissions = permData.permissions;
+      user.is_admin = permData.is_admin;
+    } catch (err) {
+      console.error('Failed to load user permissions:', err);
+      user.permissions = [];
+      user.is_admin = false;
+    }
+    
+    return user;
   }
 
   async getTasks(params?: { limit?: number; offset?: number; type?: string }): Promise<{ data: Task[]; total: number }> {

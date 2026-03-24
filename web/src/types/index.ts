@@ -6,6 +6,8 @@ export interface User {
   user_status: number;
   ctime: number;
   mtime: number;
+  permissions?: string[]; // 用户权限列表
+  is_admin?: boolean;
 }
 
 export interface AuthResponse {

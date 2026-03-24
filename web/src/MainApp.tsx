@@ -8,6 +8,7 @@ import { UserList } from './components/UserList';
 import { RoleList } from './components/RoleList';
 import { PermissionList } from './components/PermissionList';
 import { RolePermissionList } from './components/RolePermissionList';
+import { UserRoleManagement } from './components/UserRoleManagement';
 import { ModelTest } from './components/ModelTest';
 import { CopywritingGenerator } from './components/CopywritingGenerator';
 import { ImageGenerationPage } from './components/ImageGenerationPage';
@@ -16,7 +17,7 @@ import ErrorToastContainer from './components/ErrorToastContainer';
 import { apiClient } from './services/api';
 import { User } from './types';
 
-type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest' | 'admin-users' | 'admin-roles' | 'admin-permissions' | 'admin-role-permissions';
+type Page = 'copywriting' | 'generator' | 'tasks' | 'user' | 'modeltest' | 'admin-users' | 'admin-roles' | 'admin-permissions' | 'admin-role-permissions' | 'admin-user-roles';
 
 const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val: boolean) => void }> = ({ 
   isAuthenticated, 
@@ -45,7 +46,14 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
     }
   };
 
-  const isAdmin = currentUser?.user_type === 99;
+  const isAdmin = currentUser?.is_admin || currentUser?.user_type === 99;
+  
+  // 权限检查函数
+  const hasPermission = (permissionCode: string): boolean => {
+    if (!currentUser) return false;
+    if (isAdmin) return true; // 管理员拥有所有权限
+    return currentUser.permissions?.includes(permissionCode) || false;
+  };
 
   if (loading) {
     return (
@@ -68,6 +76,7 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
     if (path === '/admin/roles') return 'admin-roles';
     if (path === '/admin/permissions') return 'admin-permissions';
     if (path === '/admin/role-permissions') return 'admin-role-permissions';
+    if (path === '/admin/user-roles') return 'admin-user-roles';
     if (path.startsWith('/modeltest')) return 'modeltest';
     return 'copywriting';
   };
@@ -82,6 +91,7 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
       'admin-roles': '/admin/roles',
       'admin-permissions': '/admin/permissions',
       'admin-role-permissions': '/admin/role-permissions',
+      'admin-user-roles': '/admin/user-roles',
       modeltest: '/modeltest'
     };
     navigate(paths[page]);
@@ -104,36 +114,42 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <button
-            onClick={() => setCurrentPage('copywriting')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              currentPage() === 'copywriting'
-                ? 'bg-indigo-50 text-indigo-600 font-medium'
-                : 'text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            📝 文案生成
-          </button>
-          <button
-            onClick={() => setCurrentPage('generator')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              currentPage() === 'generator'
-                ? 'bg-indigo-50 text-indigo-600 font-medium'
-                : 'text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            🎨 图片生成
-          </button>
-          <button
-            onClick={() => setCurrentPage('tasks')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              currentPage() === 'tasks'
-                ? 'bg-indigo-50 text-indigo-600 font-medium'
-                : 'text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            📊 任务中心
-          </button>
+          {hasPermission('menu:copywriting') && (
+            <button
+              onClick={() => setCurrentPage('copywriting')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                currentPage() === 'copywriting'
+                  ? 'bg-indigo-50 text-indigo-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              📝 文案生成
+            </button>
+          )}
+          {hasPermission('menu:image') && (
+            <button
+              onClick={() => setCurrentPage('generator')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                currentPage() === 'generator'
+                  ? 'bg-indigo-50 text-indigo-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              🎨 图片生成
+            </button>
+          )}
+          {hasPermission('menu:task-center') && (
+            <button
+              onClick={() => setCurrentPage('tasks')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                currentPage() === 'tasks'
+                  ? 'bg-indigo-50 text-indigo-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              📊 任务中心
+            </button>
+          )}
           <button
             onClick={() => setCurrentPage('modeltest')}
             className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
@@ -145,67 +161,89 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
             🧪 联通性测试
           </button>
 
-          {isAdmin && (
+          {hasPermission('menu:admin') && (
             <>
               <div className="pt-4 mt-4 border-t border-gray-200">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-4 mb-2">
                   管理员功能
                 </p>
               </div>
-              <button
-                onClick={() => setCurrentPage('admin-users')}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                  currentPage() === 'admin-users'
-                    ? 'bg-indigo-50 text-indigo-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                👥 用户列表
-              </button>
-              <button
-                onClick={() => setCurrentPage('admin-roles')}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                  currentPage() === 'admin-roles'
-                    ? 'bg-indigo-50 text-indigo-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                🎭 角色列表
-              </button>
-              <button
-                onClick={() => setCurrentPage('admin-permissions')}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                  currentPage() === 'admin-permissions'
-                    ? 'bg-indigo-50 text-indigo-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                🔑 权限列表
-              </button>
-              <button
-                onClick={() => setCurrentPage('admin-role-permissions')}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                  currentPage() === 'admin-role-permissions'
-                    ? 'bg-indigo-50 text-indigo-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                🔗 角色权限
-              </button>
+              {hasPermission('menu:admin:users') && (
+                <button
+                  onClick={() => setCurrentPage('admin-users')}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                    currentPage() === 'admin-users'
+                      ? 'bg-indigo-50 text-indigo-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  👥 用户列表
+                </button>
+              )}
+              {hasPermission('menu:admin:roles') && (
+                <button
+                  onClick={() => setCurrentPage('admin-roles')}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                    currentPage() === 'admin-roles'
+                      ? 'bg-indigo-50 text-indigo-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  🎭 角色列表
+                </button>
+              )}
+              {hasPermission('menu:admin:permissions') && (
+                <button
+                  onClick={() => setCurrentPage('admin-permissions')}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                    currentPage() === 'admin-permissions'
+                      ? 'bg-indigo-50 text-indigo-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  🔑 权限列表
+                </button>
+              )}
+              {hasPermission('menu:admin:role-permissions') && (
+                <button
+                  onClick={() => setCurrentPage('admin-role-permissions')}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                    currentPage() === 'admin-role-permissions'
+                      ? 'bg-indigo-50 text-indigo-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  🔗 角色权限
+                </button>
+              )}
+              {hasPermission('menu:admin:user-roles') && (
+                <button
+                  onClick={() => setCurrentPage('admin-user-roles')}
+                  className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                    currentPage() === 'admin-user-roles'
+                      ? 'bg-indigo-50 text-indigo-600 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  👥🎭 用户角色
+                </button>
+              )}
             </>
           )}
 
           <div className="pt-4 mt-4 border-t border-gray-200"></div>
-          <button
-            onClick={() => setCurrentPage('user')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              currentPage() === 'user'
-                ? 'bg-indigo-50 text-indigo-600 font-medium'
-                : 'text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            👤 用户管理
-          </button>
+          {hasPermission('menu:user-management') && (
+            <button
+              onClick={() => setCurrentPage('user')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                currentPage() === 'user'
+                  ? 'bg-indigo-50 text-indigo-600 font-medium'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              👤 用户管理
+            </button>
+          )}
         </nav>
 
         <div className="p-4 border-t border-gray-200">
@@ -234,6 +272,7 @@ const AppContent: React.FC<{ isAuthenticated: boolean; setIsAuthenticated: (val:
             <Route path="/admin/roles" element={<RoleList />} />
             <Route path="/admin/permissions" element={<PermissionList />} />
             <Route path="/admin/role-permissions" element={<RolePermissionList />} />
+            <Route path="/admin/user-roles" element={<UserRoleManagement />} />
             <Route path="/modeltest" element={<ModelTest />} />
             <Route path="/" element={<CopywritingGenerator />} />
           </Routes>

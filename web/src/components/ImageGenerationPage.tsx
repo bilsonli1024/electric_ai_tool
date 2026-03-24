@@ -206,6 +206,7 @@ export const ImageGenerationPage: React.FC = () => {
     }
 
     setIsGenerating(true);
+    setDetailStatus('generating'); // 立即更新状态为生成中
     try {
       const taskName = `图片生成_${sku || keywords}_${Date.now()}`;
       
@@ -225,6 +226,7 @@ export const ImageGenerationPage: React.FC = () => {
             console.error('Failed to upload image:', error);
             setToast({ message: `图片${i + 1}上传失败: ${error.message}`, type: 'error' });
             setIsGenerating(false);
+            setDetailStatus('pending'); // 恢复状态
             return;
           }
         }
@@ -256,6 +258,7 @@ export const ImageGenerationPage: React.FC = () => {
       // 不清空表单，保持当前状态
     } catch (error: any) {
       setToast({ message: '生成失败: ' + error.message, type: 'error' });
+      setDetailStatus('pending'); // 失败时恢复状态
     } finally {
       setIsGenerating(false);
     }
@@ -451,10 +454,10 @@ export const ImageGenerationPage: React.FC = () => {
 
             <button 
               onClick={handleGenerateImages}
-              disabled={isGenerating || detailStatus === 'completed'}
+              disabled={isGenerating || detailStatus === 'completed' || detailStatus === 'generating'}
               className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-lg hover:from-purple-700 hover:to-indigo-700 transition-all flex items-center justify-center gap-3 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isGenerating ? (
+              {isGenerating || detailStatus === 'generating' ? (
                 <>
                   <Loader2 className="animate-spin" />
                   正在生成中...

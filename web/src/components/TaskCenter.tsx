@@ -10,6 +10,7 @@ export const TaskCenter: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [pageNo, setPageNo] = useState(1);
   const [viewMode, setViewMode] = useState<'my' | 'all'>('my');
+  const [hasViewAllPermission, setHasViewAllPermission] = useState(false);
   const pageSize = 20;
   const navigate = useNavigate();
 
@@ -22,6 +23,20 @@ export const TaskCenter: React.FC = () => {
   const [filterOperator, setFilterOperator] = useState('');
   const [filterStartTime, setFilterStartTime] = useState('');
   const [filterEndTime, setFilterEndTime] = useState('');
+
+  // 检查用户权限
+  useEffect(() => {
+    const checkPermissions = async () => {
+      try {
+        const user = await apiClient.me();
+        setHasViewAllPermission(user.is_admin || user.permissions?.includes('btn:task:view-all') || false);
+      } catch (error) {
+        console.error('Failed to check permissions:', error);
+        setHasViewAllPermission(false);
+      }
+    };
+    checkPermissions();
+  }, []);
 
   // 格式化时间戳（秒级转为可读格式）
   const formatTimestamp = (timestamp: number | string | undefined) => {
@@ -267,19 +282,21 @@ export const TaskCenter: React.FC = () => {
           >
             我的任务
           </button>
-          <button
-            onClick={() => {
-              setViewMode('all');
-              setPageNo(1);
-            }}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              viewMode === 'all'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            全部任务
-          </button>
+          {hasViewAllPermission && (
+            <button
+              onClick={() => {
+                setViewMode('all');
+                setPageNo(1);
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                viewMode === 'all'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              全部任务
+            </button>
+          )}
         </div>
       </div>
 

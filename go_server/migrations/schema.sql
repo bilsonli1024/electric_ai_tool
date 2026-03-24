@@ -321,3 +321,41 @@ AI模型枚举 (analyze_model, generate_model):
 0 - 禁用
 1 - 启用
 */
+
+-- =============================================
+-- 初始化权限数据
+-- =============================================
+
+-- 插入基础菜单权限
+INSERT INTO permissions_tab (permission_code, permission_name, permission_desc, permission_type, parent_id, permission_status) VALUES
+('menu:copywriting', '文案生成', '文案生成菜单', 1, 0, 1),
+('menu:image', '图片生成', '图片生成菜单', 1, 0, 1),
+('menu:task-center', '任务中心', '任务中心菜单', 1, 0, 1),
+('menu:user-management', '用户管理', '用户管理菜单', 1, 0, 1),
+('menu:admin', '管理员功能', '管理员功能菜单', 1, 0, 1);
+
+-- 插入管理员子菜单权限（parent_id手动指定为5，即menu:admin的ID）
+INSERT INTO permissions_tab (permission_code, permission_name, permission_desc, permission_type, parent_id, permission_status) VALUES
+('menu:admin:users', '用户列表', '用户列表菜单', 1, 5, 1),
+('menu:admin:roles', '角色列表', '角色列表菜单', 1, 5, 1),
+('menu:admin:permissions', '权限列表', '权限列表菜单', 1, 5, 1),
+('menu:admin:role-permissions', '角色权限列表', '角色权限列表菜单', 1, 5, 1),
+('menu:admin:user-roles', '用户角色管理', '用户角色管理菜单', 1, 5, 1);
+
+-- 插入按钮权限
+INSERT INTO permissions_tab (permission_code, permission_name, permission_desc, permission_type, parent_id, permission_status) VALUES
+('btn:task:view-all', '查看所有任务', '查看所有任务按钮', 2, 0, 1),
+('btn:task:copy', '复制任务', '复制任务按钮', 2, 0, 1),
+('btn:user:approve', '审批用户', '审批用户按钮', 2, 0, 1);
+
+-- 插入普通用户角色
+INSERT INTO roles_tab (role_name, role_desc, role_status) VALUES
+('普通用户', '普通用户角色', 1);
+
+-- 为普通用户角色分配权限（ID手动指定：1,2,3,4,12）
+INSERT INTO role_permissions_tab (role_id, permission_id) VALUES
+(1, 1),  -- menu:copywriting
+(1, 2),  -- menu:image
+(1, 3),  -- menu:task-center
+(1, 4),  -- menu:user-management
+(1, 12); -- btn:task:copy

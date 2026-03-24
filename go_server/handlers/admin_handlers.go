@@ -60,7 +60,17 @@ func (h *AdminHandler) ApproveUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().Unix()
-	_, err := h.db.Exec(`
+	
+	// 开启事务
+	tx, err := h.db.Begin()
+	if err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+	
+	// 更新用户状态为正常
+	_, err = tx.Exec(`
 		UPDATE users_tab 
 		SET user_status = 1, mtime = ? 
 		WHERE id = ? AND user_status = 0
@@ -69,8 +79,34 @@ func (h *AdminHandler) ApproveUser(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
+	
+	// 检查用户是否已有"普通用户"角色（role_id = 1）
+	var roleCount int
+	err = tx.QueryRow("SELECT COUNT(*) FROM user_roles_tab WHERE user_id = ? AND role_id = 1", req.UserID).Scan(&roleCount)
+	if err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
+	
+	// 如果用户还没有"普通用户"角色，自动分配
+	if roleCount == 0 {
+		_, err = tx.Exec(
+			"INSERT INTO user_roles_tab (user_id, role_id, ctime) VALUES (?, 1, ?)",
+			req.UserID, now,
+		)
+		if err != nil {
+			utils.RespondError(w, err, http.StatusInternalServerError)
+			return
+		}
+	}
+	
+	// 提交事务
+	if err = tx.Commit(); err != nil {
+		utils.RespondError(w, err, http.StatusInternalServerError)
+		return
+	}
 
-	utils.RespondJSON(w, map[string]string{"message": "用户已批准"})
+	utils.RespondJSON(w, map[string]string{"message": "用户已批准并分配普通用户角色"})
 }
 
 // RejectUser 拒绝用户

@@ -122,7 +122,12 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	if !viewAll && filter.Operator == "" {
 		// 默认只查看自己的任务
 		filter.Operator = user.Email
+		log.Printf("GetTasks: filtering by operator=%s for user_id=%d", filter.Operator, userID)
+	} else if viewAll {
+		log.Printf("GetTasks: view_all=true, showing all tasks")
 	}
+
+	log.Printf("GetTasks: filter=%+v", filter)
 
 	// 查询任务
 	tasks, total, err := h.taskCenterService.ListTasks(filter)
@@ -131,6 +136,8 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	log.Printf("GetTasks: found %d tasks, total=%d", len(tasks), total)
 
 	utils.RespondJSON(w, map[string]interface{}{
 		"data":  tasks,
