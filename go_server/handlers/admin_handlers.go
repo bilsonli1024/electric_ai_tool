@@ -31,7 +31,7 @@ func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var users []models.User
+	users := []models.User{} // 初始化为空数组而不是nil
 	for rows.Next() {
 		var user models.User
 		if err := rows.Scan(&user.ID, &user.Email, &user.Username, &user.UserType, &user.UserStatus, &user.Ctime, &user.Mtime); err != nil {
@@ -119,7 +119,7 @@ func (h *AdminHandler) GetRoles(w http.ResponseWriter, r *http.Request) {
 		Mtime      int64  `json:"mtime"`
 	}
 
-	var roles []Role
+	roles := []Role{} // 初始化为空数组
 	for rows.Next() {
 		var role Role
 		if err := rows.Scan(&role.ID, &role.RoleName, &role.RoleDesc, &role.RoleStatus, &role.Ctime, &role.Mtime); err != nil {
@@ -164,7 +164,7 @@ func (h *AdminHandler) GetPermissions(w http.ResponseWriter, r *http.Request) {
 		Mtime            int64  `json:"mtime"`
 	}
 
-	var permissions []Permission
+	permissions := []Permission{} // 初始化为空数组
 	for rows.Next() {
 		var perm Permission
 		if err := rows.Scan(&perm.ID, &perm.PermissionCode, &perm.PermissionName, &perm.PermissionDesc,
@@ -205,7 +205,7 @@ func (h *AdminHandler) GetRolePermissions(w http.ResponseWriter, r *http.Request
 		Ctime          int64  `json:"ctime"`
 	}
 
-	var rolePermissions []RolePermission
+	rolePermissions := []RolePermission{} // 初始化为空数组
 	for rows.Next() {
 		var rp RolePermission
 		if err := rows.Scan(&rp.ID, &rp.RoleID, &rp.RoleName, &rp.PermissionID, &rp.PermissionName, &rp.Ctime); err != nil {
