@@ -93,7 +93,10 @@ export const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           password_hash: passwordHash,
           verification_code: formData.verificationCode,
         });
-        onAuthSuccess();
+        setSuccess('注册成功！请等待管理员审批后登录');
+        setTimeout(() => {
+          setViewMode('login');
+        }, 2000);
       } else if (viewMode === 'login') {
         if (!formData.loginId || !formData.password) {
           throw new Error('请输入用户ID/邮箱和密码');

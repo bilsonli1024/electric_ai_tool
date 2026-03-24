@@ -83,13 +83,12 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await this.request<AuthResponse>('/api/auth/register', {
+  async register(data: RegisterRequest): Promise<{ message: string; success: boolean }> {
+    const response = await this.request<{ message: string; success: boolean }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     });
-    this.sessionId = response.session_id;
-    localStorage.setItem('session_id', response.session_id);
+    // 注册不自动登录，不设置session_id
     return response;
   }
 
