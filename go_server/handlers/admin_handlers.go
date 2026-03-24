@@ -5,6 +5,7 @@ import (
 	"electric_ai_tool/go_server/models"
 	"electric_ai_tool/go_server/utils"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -224,9 +225,14 @@ func (h *AdminHandler) GetRolePermissions(w http.ResponseWriter, r *http.Request
 // AdminMiddleware 管理员权限验证中间件
 func AdminMiddleware(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			utils.RespondError(w, fmt.Errorf("database connection is nil"), http.StatusInternalServerError)
+			return
+		}
+		
 		sessionID := r.Header.Get("Authorization")
 		if sessionID == "" {
-			utils.RespondError(w, nil, http.StatusUnauthorized)
+			utils.RespondError(w, fmt.Errorf("未授权访问"), http.StatusUnauthorized)
 			return
 		}
 
@@ -246,13 +252,13 @@ func AdminMiddleware(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
 		`, sessionID, time.Now().Unix()).Scan(&userID, &userType)
 
 		if err != nil {
-			utils.RespondError(w, err, http.StatusUnauthorized)
+			utils.RespondError(w, fmt.Errorf("认证失败"), http.StatusUnauthorized)
 			return
 		}
 
 		// 检查是否是管理员
 		if userType != 99 {
-			utils.RespondError(w, nil, http.StatusForbidden)
+			utils.RespondError(w, fmt.Errorf("需要管理员权限"), http.StatusForbidden)
 			return
 		}
 

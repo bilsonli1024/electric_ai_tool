@@ -125,7 +125,7 @@ func (s *TaskCenterService) ListTasks(filter models.TaskCenterFilter) ([]models.
 	}
 	defer rows.Close()
 
-	var items []models.TaskCenterListItem
+	items := []models.TaskCenterListItem{} // 初始化为空数组
 	for rows.Next() {
 		var item models.TaskCenterListItem
 		err := rows.Scan(

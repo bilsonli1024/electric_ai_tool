@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -26,9 +28,10 @@ func ConvertURLToDataURL(url string) (string, error) {
 	
 	LogInfo("Converting URL to data URL: %s", url)
 	
-	// 检查是否是本地文件路径 (以 /uploads/ 开头)
-	if strings.HasPrefix(url, "/uploads/") || strings.HasPrefix(url, "./uploads/") {
-		return "", fmt.Errorf("local file path detected (%s), please provide HTTP URL or data URL", url)
+	// 检查是否是本地文件路径
+	if strings.HasPrefix(url, "/uploads/") || strings.HasPrefix(url, "./uploads/") || strings.HasPrefix(url, "uploads/") {
+		// 读取本地文件
+		return convertLocalFileToDataURL(url)
 	}
 	
 	// 验证是否是有效的HTTP URL
@@ -73,6 +76,60 @@ func ConvertURLToDataURL(url string) (string, error) {
 	dataURL := fmt.Sprintf("data:%s;base64,%s", contentType, encoded)
 	
 	LogInfo("Successfully converted URL to data URL (size: %d bytes, data URL length: %d)", len(data), len(dataURL))
+	
+	return dataURL, nil
+}
+
+// convertLocalFileToDataURL 将本地文件转换为data URL
+func convertLocalFileToDataURL(localPath string) (string, error) {
+	// 移除开头的 ./ 或 /
+	localPath = strings.TrimPrefix(localPath, "./")
+	localPath = strings.TrimPrefix(localPath, "/")
+	
+	// 获取工作目录
+	workDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+	
+	// 构造完整路径
+	fullPath := filepath.Join(workDir, localPath)
+	LogInfo("Reading local file: %s", fullPath)
+	
+	// 读取文件
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read local file %s: %w", fullPath, err)
+	}
+	
+	// 验证数据大小
+	if len(data) == 0 {
+		return "", fmt.Errorf("local file is empty: %s", fullPath)
+	}
+	
+	LogInfo("Read local file: %d bytes", len(data))
+	
+	// 根据文件扩展名判断content type
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	contentType := "image/jpeg"
+	switch ext {
+	case ".png":
+		contentType = "image/png"
+	case ".jpg", ".jpeg":
+		contentType = "image/jpeg"
+	case ".gif":
+		contentType = "image/gif"
+	case ".webp":
+		contentType = "image/webp"
+	}
+	
+	// 编码为base64
+	encoded := base64.StdEncoding.EncodeToString(data)
+	
+	// 构造data URL
+	dataURL := fmt.Sprintf("data:%s;base64,%s", contentType, encoded)
+	
+	LogInfo("Successfully converted local file to data URL (size: %d bytes, data URL length: %d)", len(data), len(dataURL))
 	
 	return dataURL, nil
 }
