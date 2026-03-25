@@ -1,6 +1,9 @@
 -- 清理并重新初始化权限系统
 -- 执行此脚本前请备份数据库
 
+-- 选择数据库
+USE electric_ai_tool;
+
 -- 1. 清理现有数据（按照外键依赖顺序删除）
 DELETE FROM role_permissions_tab;
 DELETE FROM user_roles_tab;
