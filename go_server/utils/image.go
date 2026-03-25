@@ -176,15 +176,64 @@ func GetMimeType(dataURL string) string {
 }
 
 func ExtractImageFromResponse(resp *genai.GenerateContentResponse) string {
+	// 日志：响应概览
+	if resp == nil {
+		LogWarn("Gemini response is nil")
+		return ""
+	}
+	
+	candidatesCount := 0
+	if resp.Candidates != nil {
+		candidatesCount = len(resp.Candidates)
+	}
+	
+	LogInfo("Gemini response structure - Candidates: %d", candidatesCount)
+	
 	if resp.Candidates == nil || len(resp.Candidates) == 0 {
+		LogWarn("No candidates in Gemini response")
 		return ""
 	}
 
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if part.InlineData != nil {
+	// 遍历第一个候选项的所有parts
+	candidate := resp.Candidates[0]
+	if candidate.Content == nil {
+		LogWarn("Candidate content is nil")
+		return ""
+	}
+	
+	partsCount := len(candidate.Content.Parts)
+	LogInfo("First candidate has %d parts", partsCount)
+	
+	for i, part := range candidate.Content.Parts {
+		// 记录每个part的类型（不打印完整内容）
+		hasInlineData := part.InlineData != nil
+		hasText := part.Text != ""
+		
+		if hasInlineData {
+			mimeType := part.InlineData.MIMEType
+			dataSize := len(part.InlineData.Data)
+			LogInfo("Part[%d]: InlineData found - MIMEType: %s, Size: %d bytes", i, mimeType, dataSize)
+			
 			encoded := base64.StdEncoding.EncodeToString(part.InlineData.Data)
-			return fmt.Sprintf("data:%s;base64,%s", part.InlineData.MIMEType, encoded)
+			LogInfo("Returning image data URL (encoded length: %d)", len(encoded))
+			return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded)
+		}
+		
+		if hasText {
+			textLength := len(part.Text)
+			// 只打印文本的前100个字符
+			textPreview := part.Text
+			if textLength > 100 {
+				textPreview = part.Text[:100] + "..."
+			}
+			LogInfo("Part[%d]: Text found - Length: %d, Preview: %s", i, textLength, textPreview)
+		}
+		
+		if !hasInlineData && !hasText {
+			LogWarn("Part[%d]: Unknown part type (no InlineData or Text)", i)
 		}
 	}
+	
+	LogWarn("No image data found in any parts of the response")
 	return ""
 }

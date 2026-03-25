@@ -264,14 +264,37 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 		ResponseModalities: []string{"IMAGE", "TEXT"},
 	}
 
-	log.Printf("🖼️  Gemini Image API Request - Model: gemini-3.1-flash-lite-preview, Prompt length: %d chars, Images: %d", 
+	log.Printf("🖼️  Gemini Image API Request - Model: gemini-3.1-flash-lite-preview, Prompt length: %d chars, Product images: %d", 
 		len(enhancedPrompt), len(req.ProductImages))
+	
+	// 打印前200个字符的prompt预览
+	promptPreview := enhancedPrompt
+	if len(promptPreview) > 200 {
+		promptPreview = promptPreview[:200] + "..."
+	}
+	log.Printf("🖼️  Prompt preview: %s", promptPreview)
+	
+	// 打印产品图片信息（不打印完整data URL）
+	for i, imgURL := range req.ProductImages {
+		urlPreview := imgURL
+		if len(urlPreview) > 100 {
+			urlPreview = urlPreview[:50] + "...(length:" + fmt.Sprintf("%d", len(imgURL)) + ")"
+		}
+		log.Printf("🖼️  Product image[%d]: %s", i, urlPreview)
+	}
 	
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
 	if err != nil {
 		log.Printf("❌ Gemini Image API Error: %v", err)
 		return "", err
 	}
+	
+	// 打印响应基本信息（不打印完整响应体）
+	candidatesCount := 0
+	if resp.Candidates != nil {
+		candidatesCount = len(resp.Candidates)
+	}
+	log.Printf("🖼️  Gemini API Response received - Candidates: %d", candidatesCount)
 
 	imageURL := utils.ExtractImageFromResponse(resp)
 	if imageURL != "" {
