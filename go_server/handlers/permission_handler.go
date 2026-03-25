@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"database/sql"
-	"electric_ai_tool/go_server/models"
 	"electric_ai_tool/go_server/utils"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
