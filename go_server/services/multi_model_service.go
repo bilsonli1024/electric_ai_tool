@@ -282,12 +282,19 @@ func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.G
 
 	log.Printf("✅ Imagen generated image successfully - Size: %d bytes", len(imageBytes))
 
+	// 确保目录存在（使用相对路径）
+	uploadDir := "./uploads/images"
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		log.Printf("❌ Failed to create upload directory: %v", err)
+		return "", fmt.Errorf("failed to create upload directory: %w", err)
+	}
+
 	// 保存图片到本地文件
 	timestamp := time.Now().Format("20060102_150405")
 	randomSuffix := make([]byte, 4)
 	rand.Read(randomSuffix)
 	filename := fmt.Sprintf("imagen_%s_%x.png", timestamp, randomSuffix)
-	filepath := "/Users/bilson.li/work/personal/code/electric_ai_tool/go_server/uploads/images/" + filename
+	filepath := uploadDir + "/" + filename
 
 	if err := os.WriteFile(filepath, imageBytes, 0644); err != nil {
 		log.Printf("❌ Failed to save Imagen image: %v", err)
