@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"electric_ai_tool/go_server/models"
 	"electric_ai_tool/go_server/utils"
@@ -210,101 +212,92 @@ SKU: %s
 }
 
 func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.GenerateImageRequest) (string, error) {
-	// 检查是否有产品图片
-	if len(req.ProductImages) == 0 {
-		return "", fmt.Errorf("Gemini图片生成需要至少一张产品图片作为参考。请上传产品图片后重试，或选择其他模型（如GPT或DeepSeek）")
-	}
+	// Gemini图片生成使用Imagen模型，通过GenerateImages API
+	// 注意：Imagen不支持使用产品图片作为输入，只能基于文本prompt生成
+	// 如果需要基于产品图片生成，应该使用其他模型
 	
-	aspectHint := "square format (1:1)"
+	log.Printf("ℹ️  Gemini/Imagen: Note that Imagen generates images from text prompts only. Product images in request will be ignored.")
+	
+	aspectRatio := "1:1"
 	if req.AspectRatio == "4:5" {
-		aspectHint = "portrait format (4:5)"
+		aspectRatio = "3:4"  // Imagen支持的最接近比例
 	}
 
 	stylePrompt := ""
 	if req.StyleRefImage != "" {
-		stylePrompt = " Follow the style, composition, and lighting of the provided style reference image."
+		stylePrompt = " Use a style similar to: professional e-commerce product photography with clean background."
 	}
 
-	enhancedPrompt := fmt.Sprintf("%s.%s Generate in %s. Photorealistic, high quality, maintain the original product's texture, material, and fine details exactly as in the product images. Ensure the product appears consistent with all provided reference images. No distortion of product features.",
-		req.Prompt, stylePrompt, aspectHint)
+	// Imagen只支持文本prompt，不能输入图片
+	enhancedPrompt := fmt.Sprintf("%s.%s Generate in photorealistic style, high quality, professional e-commerce product image. Clean background, studio lighting, show product details clearly.",
+		req.Prompt, stylePrompt)
 
-	parts := []*genai.Part{}
-	for i, imageURL := range req.ProductImages {
-		// 转换URL为data URL
-		dataURL, err := utils.ConvertURLToDataURL(imageURL)
-		if err != nil {
-			return "", fmt.Errorf("failed to convert product image %d: %w", i+1, err)
-		}
-		
-		part, err := utils.MakeImagePart(dataURL)
-		if err != nil {
-			return "", fmt.Errorf("failed to create image part %d: %w", i+1, err)
-		}
-		parts = append(parts, part)
+	// 使用Imagen 4 Fast模型（最快的Imagen版本）
+	modelName := "imagen-4.0-fast-generate-001"
+	config := &genai.GenerateImagesConfig{
+		NumberOfImages: 1,  // 生成1张图片
+		AspectRatio:    aspectRatio,
 	}
 
-	if req.StyleRefImage != "" {
-		// 转换风格参考图
-		dataURL, err := utils.ConvertURLToDataURL(req.StyleRefImage)
-		if err != nil {
-			return "", fmt.Errorf("failed to convert style reference image: %w", err)
-		}
-		
-		part, err := utils.MakeImagePart(dataURL)
-		if err != nil {
-			return "", fmt.Errorf("failed to create style reference part: %w", err)
-		}
-		parts = append(parts, part)
-	}
-
-	parts = append(parts, &genai.Part{Text: enhancedPrompt})
-
-	contents := []*genai.Content{{Parts: parts}}
-	config := &genai.GenerateContentConfig{
-		ResponseModalities: []string{"IMAGE", "TEXT"},
-	}
-
-	log.Printf("🖼️  Gemini Image API Request - Model: gemini-3.1-flash-lite-preview, Prompt length: %d chars, Product images: %d", 
-		len(enhancedPrompt), len(req.ProductImages))
+	log.Printf("🖼️  Imagen API Request - Model: %s, Prompt length: %d chars, AspectRatio: %s", 
+		modelName, len(enhancedPrompt), aspectRatio)
 	
-	// 打印前200个字符的prompt预览
+	// 打印prompt预览
 	promptPreview := enhancedPrompt
 	if len(promptPreview) > 200 {
 		promptPreview = promptPreview[:200] + "..."
 	}
 	log.Printf("🖼️  Prompt preview: %s", promptPreview)
 	
-	// 打印产品图片信息（不打印完整data URL）
-	for i, imgURL := range req.ProductImages {
-		urlPreview := imgURL
-		if len(urlPreview) > 100 {
-			urlPreview = urlPreview[:50] + "...(length:" + fmt.Sprintf("%d", len(imgURL)) + ")"
-		}
-		log.Printf("🖼️  Product image[%d]: %s", i, urlPreview)
+	if len(req.ProductImages) > 0 {
+		log.Printf("⚠️  Warning: Imagen does not support product image inputs. %d product image(s) will be ignored. Consider using GPT or DeepSeek for image-to-image generation.", len(req.ProductImages))
 	}
 	
-	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
+	// 使用GenerateImages API
+	resp, err := s.geminiClient.Models.GenerateImages(ctx, modelName, enhancedPrompt, config)
 	if err != nil {
-		log.Printf("❌ Gemini Image API Error: %v", err)
-		return "", err
+		log.Printf("❌ Imagen API Error: %v", err)
+		return "", fmt.Errorf("Imagen图片生成失败: %w。Imagen只支持文本生成图片，不支持基于产品图片的变换。建议使用GPT或DeepSeek模型", err)
 	}
 	
-	// 打印响应基本信息（不打印完整响应体）
-	candidatesCount := 0
-	if resp.Candidates != nil {
-		candidatesCount = len(resp.Candidates)
+	// 打印响应基本信息
+	imagesCount := 0
+	if resp.GeneratedImages != nil {
+		imagesCount = len(resp.GeneratedImages)
 	}
-	log.Printf("🖼️  Gemini API Response received - Candidates: %d", candidatesCount)
+	log.Printf("🖼️  Imagen API Response received - Generated images: %d", imagesCount)
 
-	imageURL := utils.ExtractImageFromResponse(resp)
-	if imageURL != "" {
-		log.Printf("✅ Gemini Image API Response - Image generated successfully, data URL length: %d", len(imageURL))
-	} else {
-		log.Printf("⚠️  Gemini Image API Response - No image in response")
-		return "", fmt.Errorf("Gemini未返回图片。可能需要提供产品图片，或尝试使用其他模型")
+	// 检查是否生成了图片
+	if imagesCount == 0 || resp.GeneratedImages[0].Image == nil {
+		log.Printf("❌ Imagen returned no images")
+		return "", fmt.Errorf("Imagen未返回图片。这可能是因为prompt不符合内容政策，或API配置问题")
 	}
-	
-	return imageURL, nil
+
+	// 获取第一张图片
+	imageBytes := resp.GeneratedImages[0].Image.ImageBytes
+	if len(imageBytes) == 0 {
+		log.Printf("❌ Imagen returned empty image data")
+		return "", fmt.Errorf("Imagen返回的图片数据为空")
+	}
+
+	log.Printf("✅ Imagen generated image successfully - Size: %d bytes", len(imageBytes))
+
+	// 保存图片到本地文件
+	timestamp := time.Now().Format("20060102_150405")
+	randomSuffix := make([]byte, 4)
+	rand.Read(randomSuffix)
+	filename := fmt.Sprintf("imagen_%s_%x.png", timestamp, randomSuffix)
+	filepath := "/Users/bilson.li/work/personal/code/electric_ai_tool/go_server/uploads/images/" + filename
+
+	if err := os.WriteFile(filepath, imageBytes, 0644); err != nil {
+		log.Printf("❌ Failed to save Imagen image: %v", err)
+		return "", fmt.Errorf("failed to save generated image: %w", err)
+	}
+
+	log.Printf("✅ Imagen image saved to: %s", filepath)
+
+	// 返回相对路径
+	return "/uploads/images/" + filename, nil
 }
 
 func (s *MultiModelService) generateWithGPT(ctx context.Context, req models.GenerateImageRequest) (string, error) {
