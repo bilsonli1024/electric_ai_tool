@@ -73,7 +73,7 @@ func (s *TaskCenterService) ListTasks(filter models.TaskCenterFilter) ([]models.
 		args = append(args, filter.TaskType)
 	}
 
-	if filter.TaskStatus >= 0 {
+	if filter.TaskStatus > 0 {
 		whereClause += " AND tc.task_status = ?"
 		args = append(args, filter.TaskStatus)
 	}
