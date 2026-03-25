@@ -161,7 +161,8 @@ export const CopywritingGenerator: React.FC = () => {
       const response = await apiClient.getTaskCenterDetail(taskIdToLoad);
       const detail = response.data; // 提取data字段
       
-      if (detail.task_type !== 'copywriting') {
+      // 检查任务类型（支持数字1和字符串'copywriting'）
+      if (detail.task_type !== 'copywriting' && detail.task_type !== 1) {
         alert('任务类型不匹配');
         return;
       }

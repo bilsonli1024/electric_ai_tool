@@ -71,12 +71,26 @@ export const TaskCenter: React.FC = () => {
       // 刷新任务列表
       loadTasks();
       
-      // 跳转到新任务
-      const taskType = task.task_type || task.type;
-      if (taskType === 'copywriting') {
-        navigate(`/copywriting?task_id=${response.task_id}`);
-      } else if (taskType === 'image') {
-        navigate(`/image-generation?task_id=${response.task_id}`);
+      // 跳转到新任务 - 支持数字和字符串类型
+      const taskType = task.task_type !== undefined ? task.task_type : task.type;
+      
+      if (typeof taskType === 'number') {
+        // 数字类型
+        switch (taskType) {
+          case 1: // 文案生成
+            navigate(`/copywriting?task_id=${response.task_id}`);
+            break;
+          case 2: // 图片生成
+            navigate(`/image-generation?task_id=${response.task_id}`);
+            break;
+        }
+      } else {
+        // 字符串类型（兼容）
+        if (taskType === 'copywriting') {
+          navigate(`/copywriting?task_id=${response.task_id}`);
+        } else if (taskType === 'image') {
+          navigate(`/image-generation?task_id=${response.task_id}`);
+        }
       }
     } catch (error: any) {
       alert('复制失败: ' + error.message);
@@ -85,9 +99,25 @@ export const TaskCenter: React.FC = () => {
 
   // 查看任务详情
   const handleViewDetail = (task: any) => {
-    const taskType = task.task_type || task.type;
+    const taskType = task.task_type !== undefined ? task.task_type : task.type;
     const taskId = task.task_id || task.id;
     
+    // 处理数字类型（后端返回的枚举值）
+    if (typeof taskType === 'number') {
+      switch (taskType) {
+        case 1: // 文案生成
+          navigate(`/copywriting?task_id=${taskId}`);
+          return;
+        case 2: // 图片生成
+          navigate(`/image-generation?task_id=${taskId}`);
+          return;
+        default:
+          console.error('Unknown task type:', taskType);
+          return;
+      }
+    }
+    
+    // 处理字符串类型（保持兼容）
     if (taskType === 'copywriting') {
       navigate(`/copywriting?task_id=${taskId}`);
     } else if (taskType === 'image') {
@@ -97,7 +127,20 @@ export const TaskCenter: React.FC = () => {
 
   // 获取任务名称/SKU
   const getTaskName = (task: any) => {
-    const taskType = task.task_type || task.type;
+    const taskType = task.task_type !== undefined ? task.task_type : task.type;
+    
+    // 处理数字类型
+    if (typeof taskType === 'number') {
+      if (taskType === 1) {
+        // 文案生成任务显示任务名称
+        return task.task_name || '-';
+      } else if (taskType === 2) {
+        // 图片生成任务显示SKU
+        return task.sku || '-';
+      }
+    }
+    
+    // 处理字符串类型（兼容）
     if (taskType === 'copywriting') {
       // 文案生成任务显示任务名称
       return task.task_name || '-';
@@ -211,17 +254,15 @@ export const TaskCenter: React.FC = () => {
       }
     }
     
-    // 旧架构使用数字状态（保持兼容）
+    // 任务中心状态枚举（数字）
     switch (status) {
-      case 0:
-      case 2:
-        return 'bg-blue-100 text-blue-800';
-      case 1:
+      case 0: // 待处理
         return 'bg-yellow-100 text-yellow-800';
-      case 3:
+      case 1: // 处理中
+        return 'bg-blue-100 text-blue-800';
+      case 2: // 已完成
         return 'bg-green-100 text-green-800';
-      case 10:
-      case 11:
+      case 3: // 失败
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -245,27 +286,23 @@ export const TaskCenter: React.FC = () => {
       }
     }
     
-    // 旧架构使用数字状态（保持兼容）
+    // 任务中心状态枚举（数字）
     switch (status) {
-      case 0:
-        return '分析中';
-      case 1:
-        return '待生成';
-      case 2:
-        return '生成中';
-      case 3:
+      case 0: // 待处理
+        return '待处理';
+      case 1: // 处理中
+        return '处理中';
+      case 2: // 已完成
         return '已完成';
-      case 10:
-        return '分析失败';
-      case 11:
-        return '生成失败';
+      case 3: // 失败
+        return '失败';
       default:
         return '未知';
     }
   };
 
   const getTaskTypeText = (task: any) => {
-    const taskType = task.task_type || task.type;
+    const taskType = task.task_type !== undefined ? task.task_type : task.type;
     
     // 处理数字类型（后端返回的枚举值）
     if (typeof taskType === 'number') {
@@ -462,8 +499,8 @@ export const TaskCenter: React.FC = () => {
                       {task.operator || task.username || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.task_status || task.status)}`}>
-                        {getStatusText(task.task_status || task.status)}
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(task.task_status !== undefined ? task.task_status : task.status)}`}>
+                        {getStatusText(task.task_status !== undefined ? task.task_status : task.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

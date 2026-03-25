@@ -56,7 +56,8 @@ export const ImageGenerationPage: React.FC = () => {
       const response = await apiClient.getTaskCenterDetail(taskId);
       const detail = response.data;
       
-      if (detail.task_type !== 'image') {
+      // 检查任务类型（支持数字2和字符串'image'）
+      if (detail.task_type !== 'image' && detail.task_type !== 2) {
         setToast({ message: '任务类型不匹配', type: 'error' });
         return;
       }
