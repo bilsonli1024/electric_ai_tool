@@ -267,6 +267,19 @@ export const TaskCenter: React.FC = () => {
   const getTaskTypeText = (task: any) => {
     const taskType = task.task_type || task.type;
     
+    // 处理数字类型（后端返回的枚举值）
+    if (typeof taskType === 'number') {
+      switch (taskType) {
+        case 1:
+          return '文案生成';
+        case 2:
+          return '图片生成';
+        default:
+          return `任务类型${taskType}`;
+      }
+    }
+    
+    // 处理字符串类型（保持兼容）
     if (taskType === 'copywriting') {
       return '文案生成';
     }
