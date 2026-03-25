@@ -119,15 +119,19 @@ func (h *TaskCenterHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 
 	// 是否查看所有任务（管理员）
 	viewAll := query.Get("view_all") == "true"
+	
+	// 如果不是查看所有任务，且用户没有指定operator筛选
 	if !viewAll && filter.Operator == "" {
-		// 默认只查看自己的任务
+		// 默认只查看自己的任务（使用用户邮箱作为operator）
 		filter.Operator = user.Email
-		log.Printf("GetTasks: filtering by operator=%s for user_id=%d", filter.Operator, userID)
+		log.Printf("GetTasks: filtering by operator=%s (user email) for user_id=%d", filter.Operator, userID)
 	} else if viewAll {
 		log.Printf("GetTasks: view_all=true, showing all tasks")
+	} else {
+		log.Printf("GetTasks: using specified operator filter=%s", filter.Operator)
 	}
 
-	log.Printf("GetTasks: filter=%+v", filter)
+	log.Printf("GetTasks: final filter=%+v, user.Email=%s", filter, user.Email)
 
 	// 查询任务
 	tasks, total, err := h.taskCenterService.ListTasks(filter)

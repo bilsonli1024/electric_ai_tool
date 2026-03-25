@@ -110,11 +110,25 @@ export const TaskCenter: React.FC = () => {
 
   // 点击搜索按钮
   const handleSearch = () => {
+    console.log('Search clicked, applying filters:', {
+      tempFilterOperator,
+      tempFilterStartTime,
+      tempFilterEndTime
+    });
+    
     // 将临时筛选器应用到实际筛选器
     setFilterOperator(tempFilterOperator);
     setFilterStartTime(tempFilterStartTime);
     setFilterEndTime(tempFilterEndTime);
     setPageNo(1); // 重置到第一页
+    
+    // 如果没有任何筛选条件变化，手动触发加载
+    if (tempFilterOperator === filterOperator && 
+        tempFilterStartTime === filterStartTime && 
+        tempFilterEndTime === filterEndTime) {
+      console.log('No filter changes, manually triggering loadTasks');
+      loadTasks();
+    }
   };
 
   // 清空筛选
@@ -144,6 +158,15 @@ export const TaskCenter: React.FC = () => {
         endTimestamp = Math.floor(new Date(filterEndTime).getTime() / 1000);
       }
       
+      console.log('Loading tasks with params:', {
+        page_size: pageSize,
+        page_no: pageNo,
+        view_all: viewMode === 'all',
+        operator: filterOperator || undefined,
+        start_time: startTimestamp,
+        end_time: endTimestamp,
+      });
+      
       // 使用新的任务中心接口
       const response = await apiClient.getTaskCenterTasks({
         page_size: pageSize,
@@ -153,6 +176,8 @@ export const TaskCenter: React.FC = () => {
         start_time: startTimestamp,
         end_time: endTimestamp,
       });
+      
+      console.log('Tasks loaded:', response);
       
       setTasks(response?.data || []);
       setTotal(response?.total || 0);
