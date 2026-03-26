@@ -2,13 +2,11 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"electric_ai_tool/go_server/models"
 	"electric_ai_tool/go_server/utils"
@@ -102,7 +100,7 @@ SKU: %s
 	}
 
 	log.Printf("🤖 Gemini API Request - Model: gemini-3.1-flash-lite-preview, Prompt length: %d chars", len(prompt))
-	
+
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, config)
 	if err != nil {
 		log.Printf("❌ Gemini API Error: %v", err)
@@ -110,7 +108,7 @@ SKU: %s
 	}
 
 	log.Printf("✅ Gemini API Response received - Candidates: %d", len(resp.Candidates))
-	
+
 	var responseText string
 	if len(resp.Candidates) > 0 && len(resp.Candidates[0].Content.Parts) > 0 {
 		if textPart := resp.Candidates[0].Content.Parts[0].Text; textPart != "" {
@@ -212,99 +210,122 @@ SKU: %s
 }
 
 func (s *MultiModelService) generateWithGemini(ctx context.Context, req models.GenerateImageRequest) (string, error) {
-	// Gemini图片生成使用Imagen模型，通过GenerateImages API
-	// 注意：Imagen不支持使用产品图片作为输入，只能基于文本prompt生成
-	// 如果需要基于产品图片生成，应该使用其他模型
+	// Gemini 2.0 Flash支持原生的多模态图片生成
+	// 可以接收文字+图片输入，直接输出图片
 	
-	log.Printf("ℹ️  Gemini/Imagen: Note that Imagen generates images from text prompts only. Product images in request will be ignored.")
-	
-	aspectRatio := "1:1"
+	aspectHint := "square format (1:1 ratio)"
 	if req.AspectRatio == "4:5" {
-		aspectRatio = "3:4"  // Imagen支持的最接近比例
+		aspectHint = "portrait format (4:5 ratio)"
 	}
 
 	stylePrompt := ""
 	if req.StyleRefImage != "" {
-		stylePrompt = " Use a style similar to: professional e-commerce product photography with clean background."
+		stylePrompt = " Follow the style, composition, and lighting similar to the reference image provided."
 	}
 
-	// Imagen只支持文本prompt，不能输入图片
-	enhancedPrompt := fmt.Sprintf("%s.%s Generate in photorealistic style, high quality, professional e-commerce product image. Clean background, studio lighting, show product details clearly.",
-		req.Prompt, stylePrompt)
+	// 构建prompt
+	enhancedPrompt := fmt.Sprintf(`Create a professional e-commerce product image based on the provided product image(s).
 
-	// 使用Imagen 4 Fast模型（最快的Imagen版本）
-	modelName := "imagen-4.0-fast-generate-001"
-	config := &genai.GenerateImagesConfig{
-		NumberOfImages: 1,  // 生成1张图片
-		AspectRatio:    aspectRatio,
-	}
+Requirements: %s
 
-	log.Printf("🖼️  Imagen API Request - Model: %s, Prompt length: %d chars, AspectRatio: %s", 
-		modelName, len(enhancedPrompt), aspectRatio)
+Style: Professional e-commerce photography with clean background, studio lighting, high quality, photorealistic.
+Format: %s
+%s
+
+Maintain the product's original features, texture, and details. Ensure the product is clearly visible and appealing for online shopping.`, 
+		req.Prompt, aspectHint, stylePrompt)
+
+	// 准备multimodal parts
+	parts := []*genai.Part{}
 	
-	// 打印prompt预览
+	// 添加产品图片
+	for i, imageURL := range req.ProductImages {
+		dataURL, err := utils.ConvertURLToDataURL(imageURL)
+		if err != nil {
+			return "", fmt.Errorf("转换产品图片 %d 失败: %w", i+1, err)
+		}
+		
+		part, err := utils.MakeImagePart(dataURL)
+		if err != nil {
+			return "", fmt.Errorf("创建图片部分 %d 失败: %w", i+1, err)
+		}
+		parts = append(parts, part)
+		
+		// 打印图片信息
+		urlPreview := imageURL
+		if len(urlPreview) > 80 {
+			urlPreview = urlPreview[:80] + "..."
+		}
+		log.Printf("🖼️  Product image[%d]: %s", i, urlPreview)
+	}
+	
+	// 添加风格参考图
+	if req.StyleRefImage != "" {
+		dataURL, err := utils.ConvertURLToDataURL(req.StyleRefImage)
+		if err != nil {
+			return "", fmt.Errorf("转换风格参考图失败: %w", err)
+		}
+		
+		part, err := utils.MakeImagePart(dataURL)
+		if err != nil {
+			return "", fmt.Errorf("创建风格参考部分失败: %w", err)
+		}
+		parts = append(parts, part)
+		log.Printf("🎨 Style reference image added")
+	}
+	
+	// 添加文字prompt
+	parts = append(parts, &genai.Part{Text: enhancedPrompt})
+
+	contents := []*genai.Content{{Parts: parts}}
+	
+	// 使用Gemini 3.1 Flash Image模型（优先）或3 Pro Image Preview作为备选
+	modelName := "gemini-3.1-flash-image"
+	config := &genai.GenerateContentConfig{
+		ResponseModalities: []string{"IMAGE"}, // 只要求图片输出
+	}
+
+	log.Printf("🖼️  Gemini Native Image Generation Request")
+	log.Printf("📝 Model: %s, Product images: %d, Prompt length: %d", 
+		modelName, len(req.ProductImages), len(enhancedPrompt))
+	
 	promptPreview := enhancedPrompt
-	if len(promptPreview) > 200 {
-		promptPreview = promptPreview[:200] + "..."
+	if len(promptPreview) > 300 {
+		promptPreview = promptPreview[:300] + "..."
 	}
-	log.Printf("🖼️  Prompt preview: %s", promptPreview)
-	
-	if len(req.ProductImages) > 0 {
-		log.Printf("⚠️  Warning: Imagen does not support product image inputs. %d product image(s) will be ignored. Consider using GPT or DeepSeek for image-to-image generation.", len(req.ProductImages))
-	}
-	
-	// 使用GenerateImages API
-	resp, err := s.geminiClient.Models.GenerateImages(ctx, modelName, enhancedPrompt, config)
+	log.Printf("📝 Prompt: %s", promptPreview)
+
+	resp, err := s.geminiClient.Models.GenerateContent(ctx, modelName, contents, config)
 	if err != nil {
-		log.Printf("❌ Imagen API Error: %v", err)
-		return "", fmt.Errorf("Imagen图片生成失败: %w。Imagen只支持文本生成图片，不支持基于产品图片的变换。建议使用GPT或DeepSeek模型", err)
-	}
-	
-	// 打印响应基本信息
-	imagesCount := 0
-	if resp.GeneratedImages != nil {
-		imagesCount = len(resp.GeneratedImages)
-	}
-	log.Printf("🖼️  Imagen API Response received - Generated images: %d", imagesCount)
-
-	// 检查是否生成了图片
-	if imagesCount == 0 || resp.GeneratedImages[0].Image == nil {
-		log.Printf("❌ Imagen returned no images")
-		return "", fmt.Errorf("Imagen未返回图片。这可能是因为prompt不符合内容政策，或API配置问题")
+		log.Printf("⚠️  %s failed: %v, trying fallback model", modelName, err)
+		
+		// 尝试备选模型
+		modelName = "gemini-3-pro-image-preview"
+		log.Printf("🔄 Retrying with fallback model: %s", modelName)
+		
+		resp, err = s.geminiClient.Models.GenerateContent(ctx, modelName, contents, config)
+		if err != nil {
+			log.Printf("❌ Gemini Image Generation Error (both models failed): %v", err)
+			return "", fmt.Errorf("Gemini图片生成失败: %w", err)
+		}
 	}
 
-	// 获取第一张图片
-	imageBytes := resp.GeneratedImages[0].Image.ImageBytes
-	if len(imageBytes) == 0 {
-		log.Printf("❌ Imagen returned empty image data")
-		return "", fmt.Errorf("Imagen返回的图片数据为空")
+	// 打印响应信息
+	candidatesCount := 0
+	if resp.Candidates != nil {
+		candidatesCount = len(resp.Candidates)
+	}
+	log.Printf("🖼️  Gemini Response - Model: %s, Candidates: %d", modelName, candidatesCount)
+
+	// 提取图片
+	imageDataURL := utils.ExtractImageFromResponse(resp)
+	if imageDataURL == "" {
+		log.Printf("❌ No image found in Gemini response")
+		return "", fmt.Errorf("Gemini未返回图片。这可能是因为内容不符合安全政策，或模型暂时不可用")
 	}
 
-	log.Printf("✅ Imagen generated image successfully - Size: %d bytes", len(imageBytes))
-
-	// 确保目录存在（使用相对路径）
-	uploadDir := "./uploads/images"
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		log.Printf("❌ Failed to create upload directory: %v", err)
-		return "", fmt.Errorf("failed to create upload directory: %w", err)
-	}
-
-	// 保存图片到本地文件
-	timestamp := time.Now().Format("20060102_150405")
-	randomSuffix := make([]byte, 4)
-	rand.Read(randomSuffix)
-	filename := fmt.Sprintf("imagen_%s_%x.png", timestamp, randomSuffix)
-	filepath := uploadDir + "/" + filename
-
-	if err := os.WriteFile(filepath, imageBytes, 0644); err != nil {
-		log.Printf("❌ Failed to save Imagen image: %v", err)
-		return "", fmt.Errorf("failed to save generated image: %w", err)
-	}
-
-	log.Printf("✅ Imagen image saved to: %s", filepath)
-
-	// 返回相对路径
-	return "/uploads/images/" + filename, nil
+	log.Printf("✅ Gemini native image generation successful - Model: %s, Data URL length: %d", modelName, len(imageDataURL))
+	return imageDataURL, nil
 }
 
 func (s *MultiModelService) generateWithGPT(ctx context.Context, req models.GenerateImageRequest) (string, error) {
@@ -377,7 +398,7 @@ func (s *MultiModelService) testChatWithGemini(ctx context.Context, prompt strin
 	contents := []*genai.Content{{Parts: parts}}
 
 	log.Printf("💬 Gemini Chat Test - Prompt: %s", prompt)
-	
+
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, "gemini-3.1-flash-lite-preview", contents, nil)
 	if err != nil {
 		log.Printf("❌ Gemini Chat Test Error: %v", err)
@@ -417,4 +438,3 @@ func (s *MultiModelService) testChatWithDeepSeek(ctx context.Context, prompt str
 
 	return callOpenAICompatibleChat(apiBase, apiKey, prompt, "deepseek-chat")
 }
-

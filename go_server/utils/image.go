@@ -237,3 +237,26 @@ func ExtractImageFromResponse(resp *genai.GenerateContentResponse) string {
 	LogWarn("No image data found in any parts of the response")
 	return ""
 }
+
+// ExtractTextFromResponse 从Gemini响应中提取文本内容
+func ExtractTextFromResponse(resp *genai.GenerateContentResponse) string {
+	if resp == nil || resp.Candidates == nil || len(resp.Candidates) == 0 {
+		return ""
+	}
+
+	candidate := resp.Candidates[0]
+	if candidate.Content == nil || candidate.Content.Parts == nil {
+		return ""
+	}
+
+	// 遍历所有parts，提取文本
+	var textParts []string
+	for _, part := range candidate.Content.Parts {
+		if part.Text != "" {
+			textParts = append(textParts, part.Text)
+		}
+	}
+
+	// 合并所有文本parts
+	return strings.Join(textParts, "\n")
+}
