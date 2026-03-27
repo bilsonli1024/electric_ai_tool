@@ -279,8 +279,8 @@ Maintain the product's original features, texture, and details. Ensure the produ
 
 	contents := []*genai.Content{{Parts: parts}}
 	
-	// 使用Gemini 3.1 Flash Image模型（优先）或3 Pro Image Preview作为备选
-	modelName := "gemini-3.1-flash-image"
+	// 直接使用当前可用的Gemini图片生成模型
+	modelName := "gemini-3-pro-image-preview"
 	config := &genai.GenerateContentConfig{
 		ResponseModalities: []string{"IMAGE"}, // 只要求图片输出
 	}
@@ -297,17 +297,8 @@ Maintain the product's original features, texture, and details. Ensure the produ
 
 	resp, err := s.geminiClient.Models.GenerateContent(ctx, modelName, contents, config)
 	if err != nil {
-		log.Printf("⚠️  %s failed: %v, trying fallback model", modelName, err)
-		
-		// 尝试备选模型
-		modelName = "gemini-3-pro-image-preview"
-		log.Printf("🔄 Retrying with fallback model: %s", modelName)
-		
-		resp, err = s.geminiClient.Models.GenerateContent(ctx, modelName, contents, config)
-		if err != nil {
-			log.Printf("❌ Gemini Image Generation Error (both models failed): %v", err)
-			return "", fmt.Errorf("Gemini图片生成失败: %w", err)
-		}
+		log.Printf("❌ Gemini Image Generation Error: %v", err)
+		return "", fmt.Errorf("Gemini图片生成失败: %w", err)
 	}
 
 	// 打印响应信息

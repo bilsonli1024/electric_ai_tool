@@ -5,6 +5,35 @@ import { CopywritingSelector } from './CopywritingSelector';
 import { apiClient } from '../services/api';
 import { Toast, ToastType } from './Toast';
 
+type ImageDetailStatus = 'pending' | 'generating' | 'completed' | 'failed';
+
+const normalizeImageDetailStatus = (status: unknown): ImageDetailStatus => {
+  if (status === null || status === undefined) return 'pending';
+
+  if (typeof status === 'number') {
+    switch (status) {
+      case 1:
+        return 'generating';
+      case 2:
+        return 'completed';
+      case 3:
+        return 'failed';
+      default:
+        return 'pending';
+    }
+  }
+
+  const normalized = String(status).toLowerCase();
+  if (normalized === 'generating') return 'generating';
+  if (normalized === 'completed') return 'completed';
+  if (normalized === 'failed') return 'failed';
+  return 'pending';
+};
+
+const isImageTaskType = (taskType: unknown): boolean => {
+  return taskType === 2 || taskType === '2' || taskType === 'image';
+};
+
 export const ImageGenerationPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,17 +67,20 @@ export const ImageGenerationPage: React.FC = () => {
 
   // 轮询任务状态
   useEffect(() => {
-    // 只有在生成中才轮询
-    if (!currentTaskId || !isGenerating || detailStatus === 'completed' || detailStatus === 'failed') {
+    // 任务未结束时持续轮询，不依赖isGenerating（请求返回后会被置false）
+    if (!currentTaskId || detailStatus === 'completed' || detailStatus === 'failed') {
       return;
     }
 
+    // 立即查一次，减少等待时间
+    pollTaskStatus(currentTaskId);
+
     const pollInterval = setInterval(() => {
       pollTaskStatus(currentTaskId);
-    }, 10000); // 每10秒轮询一次
+    }, 3000); // 每3秒轮询一次
 
     return () => clearInterval(pollInterval);
-  }, [currentTaskId, isGenerating, detailStatus]);
+  }, [currentTaskId, detailStatus]);
 
   const loadTaskDetail = async (taskId: string) => {
     setIsLoadingTask(true);
@@ -57,7 +89,7 @@ export const ImageGenerationPage: React.FC = () => {
       const detail = response.data;
       
       // 检查任务类型（支持数字2和字符串'image'）
-      if (detail.task_type !== 'image' && detail.task_type !== 2) {
+      if (!isImageTaskType(detail.task_type)) {
         setToast({ message: '任务类型不匹配', type: 'error' });
         return;
       }
@@ -84,10 +116,11 @@ export const ImageGenerationPage: React.FC = () => {
       // 设置任务状态
       setCurrentTaskId(taskId);
       setTaskStatus(detail.task_status);
-      setDetailStatus(imageDetail.detail_status || 'pending');
+      const normalizedDetailStatus = normalizeImageDetailStatus(imageDetail.detail_status);
+      setDetailStatus(normalizedDetailStatus);
       
       // 如果已完成，显示结果
-      if (imageDetail.detail_status === 'completed' && imageDetail.generated_image_urls) {
+      if (normalizedDetailStatus === 'completed' && imageDetail.generated_image_urls) {
         const urls = imageDetail.generated_image_urls.split(',').filter((url: string) => url.trim());
         setGeneratedImageUrls(urls);
         // 跳转到结果页
@@ -95,7 +128,7 @@ export const ImageGenerationPage: React.FC = () => {
       }
       
       // 如果正在生成，开始轮询
-      if (imageDetail.detail_status === 'generating') {
+      if (normalizedDetailStatus === 'generating' || normalizedDetailStatus === 'pending') {
         setIsGenerating(true);
       }
       
@@ -111,11 +144,12 @@ export const ImageGenerationPage: React.FC = () => {
       const response = await apiClient.getTaskCenterDetail(taskId);
       const detail = response.data;
       const imageDetail = detail.detail_data as any;
+      const normalizedDetailStatus = normalizeImageDetailStatus(imageDetail.detail_status);
       
       setTaskStatus(detail.task_status);
-      setDetailStatus(imageDetail.detail_status || 'pending');
+      setDetailStatus(normalizedDetailStatus);
       
-      if (imageDetail.detail_status === 'completed') {
+      if (normalizedDetailStatus === 'completed') {
         setIsGenerating(false);
         if (imageDetail.generated_image_urls) {
           const urls = imageDetail.generated_image_urls.split(',').filter((url: string) => url.trim());
@@ -124,7 +158,7 @@ export const ImageGenerationPage: React.FC = () => {
           navigate(`/image-generation/result?task_id=${taskId}`);
         }
         setToast({ message: '图片生成成功！', type: 'success' });
-      } else if (imageDetail.detail_status === 'failed') {
+      } else if (normalizedDetailStatus === 'failed') {
         setIsGenerating(false);
         setToast({ message: '图片生成失败: ' + (imageDetail.fail_msg || imageDetail.error_message || '未知错误'), type: 'error' });
       }

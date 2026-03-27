@@ -4,6 +4,10 @@ import { Sparkles, Download, ArrowLeft, Loader2, CheckCircle, Copy } from 'lucid
 import { apiClient } from '../services/api';
 import { Toast, ToastType } from './Toast';
 
+const isImageTaskType = (taskType: unknown): boolean => {
+  return taskType === 2 || taskType === '2' || taskType === 'image';
+};
+
 export const ImageGenerationResult: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -32,7 +36,7 @@ export const ImageGenerationResult: React.FC = () => {
       const response = await apiClient.getTaskCenterDetail(taskId);
       const detail = response.data;
       
-      if (detail.task_type !== 'image') {
+      if (!isImageTaskType(detail.task_type)) {
         setToast({ message: '任务类型不匹配', type: 'error' });
         navigate('/image-generation');
         return;
